@@ -1,0 +1,3 @@
+# Disallow crawling the randomly-generated page
+user-agent: *
+disallow: /random
