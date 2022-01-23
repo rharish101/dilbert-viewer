@@ -83,10 +83,9 @@ async fn main() -> IOResult<()> {
 
     let viewer = web::Data::new(Viewer::new().await.unwrap());
     let host = format!("0.0.0.0:{}", env::var("PORT").unwrap());
-    let num_workers = usize::from_str(env::var("WEB_CONCURRENCY").unwrap().as_str()).unwrap();
-    info!("Starting server at {} with {} workers", host, num_workers);
+    info!("Starting server at {}", host);
 
-    HttpServer::new(move || {
+    let mut server = HttpServer::new(move || {
         // Needs to be different for every worker, so invoke it here instead of outside
         let static_service =
             Files::new(STATIC_URL, String::from("static")).default_handler(invalid_url);
@@ -97,9 +96,14 @@ async fn main() -> IOResult<()> {
             .service(random_comic)
             // This should be at the end, otherwise everything after this will be ignored
             .service(static_service)
-    })
-    .workers(num_workers)
-    .bind(host)?
-    .run()
-    .await
+    });
+
+    // Currently the Rust buildpack for Heroku doesn't support WEB_CONCURRENCY, so only use it if
+    // present
+    if let Ok(web_concurrency) = env::var("WEB_CONCURRENCY") {
+        let num_workers = usize::from_str(web_concurrency.as_str()).unwrap();
+        server = server.workers(num_workers);
+    }
+
+    server.bind(host)?.run().await
 }

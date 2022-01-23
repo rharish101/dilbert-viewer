@@ -22,7 +22,7 @@ To install the Heroku CLI, please refer to [Heroku's installation guide](https:/
 
 2. Set the required environment variables and run the viewer locally with the Heroku CLI:
     ```sh
-    DATABASE_URL=$(heroku config:get DATABASE_URL -a dilbert-viewer) WEB_CONCURRENCY=1 heroku local web
+    DATABASE_URL=$(heroku config:get DATABASE_URL -a dilbert-viewer) heroku local web
     ```
 
 ### For Contributing
