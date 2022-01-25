@@ -34,7 +34,7 @@ pub struct Viewer {
     latest_date_scraper: LatestDateScraper,
 }
 
-/// Initialize the database connection pool for caching data
+/// Initialize the database connection pool for caching data.
 async fn get_db_pool() -> Result<Pool, DbInitError> {
     // Heroku needs SSL for its PostgreSQL DB, but uses a self-signed certificate. So simply
     // disable verification while keeping SSL.
@@ -44,21 +44,21 @@ async fn get_db_pool() -> Result<Pool, DbInitError> {
     let tls = MakeTlsConnector::new(tls_connector);
 
     let mut pg_config = PgConfig::from_str(env::var("DATABASE_URL")?.as_str())?;
-    pg_config.ssl_mode(SslMode::Require); // Heroku needs this
+    pg_config.ssl_mode(SslMode::Require); // Heroku needs this.
     pg_config.connect_timeout(TimeDuration::from_secs(DB_TIMEOUT));
 
     let manager = Manager::new(pg_config, tls);
     Ok(Pool::builder(manager).max_size(MAX_DB_CONN).build()?)
 }
 
-/// Initialize the client session for scraping comics
+/// Initialize the client session for scraping comics.
 async fn get_http_client() -> Result<HttpClient, HttpError> {
     let timeout = TimeDuration::from_secs(FETCH_TIMEOUT);
     HttpClient::builder().timeout(timeout).build()
 }
 
 impl Viewer {
-    /// Initialize all necessary stuff for the viewer
+    /// Initialize all necessary stuff for the viewer.
     pub async fn new() -> AppResult<Self> {
         let (db_pool_res, http_client_res) = futures::join!(get_db_pool(), get_http_client());
         let db_pool = db_pool_res?;
@@ -75,9 +75,9 @@ impl Viewer {
         })
     }
 
-    /// Serve the rendered HTML given scraped data
+    /// Serve the rendered HTML given scraped data.
     ///
-    /// Both input dates must be in the format used by "dilbert.com"
+    /// Both input dates must be in the format used by "dilbert.com".
     ///
     /// # Arguments
     /// * `date` - The (possibly corrected) date of the comic
@@ -121,9 +121,9 @@ impl Viewer {
         Ok(HttpResponse::Ok().body(webpage))
     }
 
-    /// Serve the requested comic, without handling errors
+    /// Serve the requested comic, without handling errors.
     async fn serve_comic_raw(&self, date: &str, show_latest: bool) -> AppResult<HttpResponse> {
-        // Execute both in parallel, as they are independent of each other
+        // Execute both in parallel, as they are independent of each other.
         let (comic_data_res, latest_comic_res) = futures::join!(
             self.comic_scraper
                 .get_comic_data(&self.db_pool, &self.http_client, date),
@@ -136,7 +136,7 @@ impl Viewer {
             data
         } else {
             // The data is None if the input is invalid (i.e. "dilbert.com" has redirected to the
-            // homepage)
+            // homepage).
             if show_latest {
                 info!(
                     "No comic found for {date}, instead displaying the latest comic ({})",
@@ -188,9 +188,9 @@ impl Viewer {
         }
     }
 
-    /// Serve the requested comic
+    /// Serve the requested comic.
     ///
-    /// If an error is raised, then a 500 internal server error response is returned
+    /// If an error is raised, then a 500 internal server error response is returned.
     ///
     /// # Arguments
     /// * `date` - The date of the requested comic, in the format used by "dilbert.com"
@@ -203,15 +203,15 @@ impl Viewer {
         }
     }
 
-    /// Serve a 404 not found response for invalid URLs, without handling errors
+    /// Serve a 404 not found response for invalid URLs, without handling errors.
     fn serve_404_raw(date: Option<&str>) -> AppResult<HttpResponse> {
         let webpage = NotFoundTemplate { date, repo: REPO }.render()?;
         Ok(HttpResponse::NotFound().body(webpage))
     }
 
-    /// Serve a 404 not found response for invalid URLs
+    /// Serve a 404 not found response for invalid URLs.
     ///
-    /// If an error is raised, then a 500 internal server error response is returned
+    /// If an error is raised, then a 500 internal server error response is returned.
     ///
     /// # Arguments
     /// * `date` - The date of the requested comic, if available. This must be a valid date for
@@ -223,7 +223,7 @@ impl Viewer {
         }
     }
 
-    /// Serve a 500 internal server error response
+    /// Serve a 500 internal server error response.
     ///
     /// # Arguments
     /// * `err` - The actual internal server error

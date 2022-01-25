@@ -18,21 +18,21 @@ const LATEST_DATE_STMT: &str = "
     SELECT latest FROM latest_date
     WHERE last_check >= CURRENT_TIMESTAMP - INTERVAL '1 hour' * $1;";
 const INSERT_DATE_STMT: &str = "INSERT INTO latest_date (latest) VALUES ($1);";
-// The WHERE condition is not required as there is always only one row in the `latest_date` table
+// The WHERE condition is not required as there is always only one row in the `latest_date` table.
 const UPDATE_DATE_STMT: &str = "UPDATE latest_date SET latest = $1;";
 
-/// Struct to scrape the date of the latest Dilbert comic
+/// Struct to scrape the date of the latest Dilbert comic.
 ///
-/// This scraper returns that date in the format used by "dilbert.com"
+/// This scraper returns that date in the format used by "dilbert.com".
 pub(crate) struct LatestDateScraper {}
 
 impl LatestDateScraper {
-    /// Initialize a latest date scraper
+    /// Initialize a latest date scraper.
     pub(crate) fn new() -> LatestDateScraper {
         Self {}
     }
 
-    /// Retrieve the date of the latest comic
+    /// Retrieve the date of the latest comic.
     ///
     /// # Arguments
     /// * `db_pool` - The pool of connections to the DB
@@ -45,7 +45,7 @@ impl LatestDateScraper {
         self.get_data(db_pool, http_client, &()).await
     }
 
-    /// Update the latest date in the cache
+    /// Update the latest date in the cache.
     ///
     /// # Arguments
     /// * `db_pool` - The pool of connections to the DB
@@ -57,10 +57,10 @@ impl LatestDateScraper {
 
 #[async_trait]
 impl Scraper<String, str, ()> for LatestDateScraper {
-    /// Get the cached latest date from the database
+    /// Get the cached latest date from the database.
     ///
     /// If the latest date entry is stale (i.e. it was updated a long time back), or it wasn't
-    /// found in the cache, None is returned
+    /// found in the cache, None is returned.
     async fn get_cached_data(&self, db_pool: &Pool, _reference: &()) -> AppResult<Option<String>> {
         let rows = db_pool
             .get()
@@ -74,7 +74,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         }
     }
 
-    /// Cache the latest date into the database
+    /// Cache the latest date into the database.
     async fn cache_data(&self, db_pool: &Pool, date: &str, _reference: &()) -> AppResult<()> {
         let db_client = db_pool.get().await?;
         let query_params: [&(dyn ToSql + Sync); 1] = [&str_to_date(date, DATE_FMT)?];
@@ -105,9 +105,10 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         Ok(())
     }
 
-    /// Scrape the date of the latest comic from "dilbert.com"
+    /// Scrape the date of the latest comic from "dilbert.com".
     async fn scrape_data(&self, http_client: &HttpClient, _reference: &()) -> AppResult<String> {
-        // If there is no comic for this date yet, "dilbert.com" will auto-redirect to the homepage
+        // If there is no comic for this date yet, "dilbert.com" will auto-redirect to the
+        // homepage.
         let latest = curr_date().format(DATE_FMT).to_string();
         let url = String::from(SRC_PREFIX) + &latest;
 

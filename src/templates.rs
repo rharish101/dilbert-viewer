@@ -10,7 +10,7 @@ pub(crate) struct ComicTemplate<'a> {
     /// The scraped comic data
     pub data: &'a ComicData,
 
-    // All date formats should conform to the format given by `crate::constants::DATE_FMT`
+    // All date formats should conform to the format given by `crate::constants::DATE_FMT`.
     /// The date of the comic
     pub date: &'a str,
     /// The date of the first comic

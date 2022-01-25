@@ -19,7 +19,7 @@ pub(crate) const FETCH_TIMEOUT: u64 = 3;
 // Parameters for caching to the database
 // ==================================================
 /// Limit for connections to the cache database
-// Heroku's free tier limit is 20
+// Heroku's free tier limit is 20.
 pub(crate) const MAX_DB_CONN: usize = 19;
 /// Timeout (in seconds) for a single database operation
 pub(crate) const DB_TIMEOUT: u64 = 3;
@@ -39,5 +39,5 @@ pub(crate) const SRC_PREFIX: &str = "https://dilbert.com/strip/";
 // Mainly for publicity :P
 pub(crate) const REPO: &str = "https://github.com/rharish101/dilbert-viewer";
 /// URL path for static files
-// This is set to root as it's easy to serve robots.txt by keeping it in static
+// This is set to root as it's easy to serve robots.txt by keeping it in static.
 pub(crate) const STATIC_URL: &str = "/";

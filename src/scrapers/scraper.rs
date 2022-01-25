@@ -11,19 +11,19 @@ use crate::errors::AppResult;
 #[async_trait]
 pub(crate) trait Scraper<Data: Send + Sync, DataBorrowed: Sync + ?Sized, Ref: Sync + ?Sized>
 where
-    // This allows using &str instead of &String, when `Data` is String
+    // This allows using &str instead of &String, when `Data` is String.
     Data: Borrow<DataBorrowed>,
 {
-    /// Retrieve cached data from the database
+    /// Retrieve cached data from the database.
     ///
-    /// If data is not found in the cache, None should be returned
+    /// If data is not found in the cache, None should be returned.
     ///
     /// # Arguments:
     /// * `db_pool` - The pool of connections to the DB
     /// * `reference` - The reference to the data that is to be retrieved
     async fn get_cached_data(&self, db_pool: &Pool, reference: &Ref) -> AppResult<Option<Data>>;
 
-    /// Cache data into the database
+    /// Cache data into the database.
     ///
     /// # Arguments:
     /// * `db_pool` - The pool of connections to the DB
@@ -36,16 +36,16 @@ where
         reference: &Ref,
     ) -> AppResult<()>;
 
-    /// Scrape data from the source
+    /// Scrape data from the source.
     ///
     /// # Arguments:
     /// * `http_client` - The HTTP client for scraping from the source
     /// * `reference` - The reference to the data that is to be retrieved
     async fn scrape_data(&self, http_client: &HttpClient, reference: &Ref) -> AppResult<Data>;
 
-    /// Cache data while handling exceptions
+    /// Cache data while handling exceptions.
     ///
-    /// Since caching failure is not fatal, we simply log it and ignore it
+    /// Since caching failure is not fatal, we simply log it and ignore it.
     ///
     /// # Arguments:
     /// * `db_pool` - The pool of connections to the DB
@@ -57,7 +57,7 @@ where
         }
     }
 
-    /// Retrieve the data, either from the source or from cache
+    /// Retrieve the data, either from the source or from cache.
     ///
     /// # Arguments
     /// * `db_pool` - The pool of connections to the DB
@@ -77,7 +77,7 @@ where
                 return Ok(data);
             }
             Err(err) => {
-                // Better to re-scrape now than crash unexpectedly, so simply log the error
+                // Better to re-scrape now than crash unexpectedly, so simply log the error.
                 error!("{:?}", err);
             }
         }

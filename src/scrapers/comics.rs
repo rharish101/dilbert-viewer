@@ -41,7 +41,7 @@ pub(crate) struct ComicData {
     pub img_url: String,
 }
 
-/// Class for a comic scraper
+/// Struct for a comic scraper
 ///
 /// This scraper takes a date (in the format used by "dilbert.com") as input.
 /// It returns the info about the comic.
@@ -59,7 +59,7 @@ fn regex_to_app_error(err: RegexError, msg: &str) -> AppError {
 }
 
 impl ComicScraper {
-    /// Initialize a comics scraper
+    /// Initialize a comics scraper.
     pub(crate) fn new() -> AppResult<ComicScraper> {
         let title_regex = Regex::new("<span class=\"comic-title-name\">([^<]+)</span>")
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic title"))?;
@@ -71,7 +71,7 @@ impl ComicScraper {
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic image URL"))?;
 
         Ok(Self {
-            // We want to guard a section of code, not an item, so use `()`
+            // We want to guard a section of code, not an item, so use `()`.
             insert_comic_lock: Mutex::new(()),
             title_regex,
             date_str_regex,
@@ -79,7 +79,7 @@ impl ComicScraper {
         })
     }
 
-    /// Update the last used date for the given comic
+    /// Update the last used date for the given comic.
     async fn update_last_used(db_pool: &Pool, date: &NaiveDate) -> AppResult<()> {
         info!("Updating `last_used` for data in cache");
         db_pool
@@ -90,7 +90,7 @@ impl ComicScraper {
         Ok(())
     }
 
-    /// Remove excess rows from the cache
+    /// Remove excess rows from the cache.
     async fn clean_cache(db_pool: &Pool) -> AppResult<()> {
         // This is an approximate of the no. of rows in the `comic_cache` table.  This is much
         // faster than the accurate measurement, as given here:
@@ -120,7 +120,7 @@ impl ComicScraper {
         Ok(())
     }
 
-    /// Retrieve the data for the requested comic
+    /// Retrieve the data for the requested comic.
     ///
     /// # Arguments
     /// * `db_pool` - The pool of connections to the DB
@@ -142,10 +142,10 @@ impl ComicScraper {
 
 #[async_trait]
 impl Scraper<ComicData, ComicData, str> for ComicScraper {
-    /// Get the cached comic data from the database
+    /// Get the cached comic data from the database.
     ///
     /// If the comic date entry is stale (i.e. it was updated a long time back), or it wasn't
-    /// found in the cache, None is returned
+    /// found in the cache, None is returned.
     async fn get_cached_data(&self, db_pool: &Pool, date: &str) -> AppResult<Option<ComicData>> {
         let date = str_to_date(date, DATE_FMT)?;
         // The other columns in the table are: `comic`, `last_used`. `comic` is not required here,
@@ -160,7 +160,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             .await?;
         if rows.is_empty() {
             // This means that the comic for this date wasn't cached, or the date is invalid (i.e.
-            // it would redirect to a comic with a different date)
+            // it would redirect to a comic with a different date).
             return Ok(None);
         }
 
@@ -178,10 +178,10 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         Ok(Some(data))
     }
 
-    /// Cache the comic data into the database
+    /// Cache the comic data into the database.
     async fn cache_data(&self, db_pool: &Pool, data: &ComicData, _date: &str) -> AppResult<()> {
         // The given date can be invalid (i.e. we may have been redirected to a comic with a
-        // different date), hence get the correct date from the scraped data
+        // different date), hence get the correct date from the scraped data.
         let date = str_to_date(&data.date_str, ALT_DATE_FMT)?;
 
         let db_client = db_pool.get().await?;
@@ -218,7 +218,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             return Ok(());
         }
 
-        // Release the lock, as it's no longer needed
+        // Release the lock, as it's no longer needed.
         debug!("Releasing the comic insertion lock");
         drop(lock_guard);
 
@@ -229,7 +229,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         Ok(())
     }
 
-    /// Scrape the comic data of the requested date from the source
+    /// Scrape the comic data of the requested date from the source.
     async fn scrape_data(&self, http_client: &HttpClient, date: &str) -> AppResult<ComicData> {
         let url = String::from(SRC_PREFIX) + date;
         let resp = http_client.get(url).send().await?;
