@@ -4,7 +4,7 @@ use std::env;
 use std::str::FromStr;
 use std::time::Duration as TimeDuration;
 
-use actix_web::HttpResponse;
+use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
 use chrono::{Duration as DateDuration, NaiveDate};
 use deadpool_postgres::{Manager, Pool};
@@ -118,7 +118,9 @@ impl Viewer {
             repo: REPO,
         }
         .render()?;
-        Ok(HttpResponse::Ok().body(webpage))
+        Ok(HttpResponse::Ok()
+            .content_type(ContentType::html())
+            .body(webpage))
     }
 
     /// Serve the requested comic, without handling errors.
@@ -206,7 +208,9 @@ impl Viewer {
     /// Serve a 404 not found response for invalid URLs, without handling errors.
     fn serve_404_raw(date: Option<&str>) -> AppResult<HttpResponse> {
         let webpage = NotFoundTemplate { date, repo: REPO }.render()?;
-        Ok(HttpResponse::NotFound().body(webpage))
+        Ok(HttpResponse::NotFound()
+            .content_type(ContentType::html())
+            .body(webpage))
     }
 
     /// Serve a 404 not found response for invalid URLs.
@@ -230,6 +234,8 @@ impl Viewer {
     pub fn serve_500(err: AppError) -> HttpResponse {
         let error = &format!("{:?}", err);
         let webpage = ErrorTemplate { error, repo: REPO }.render().unwrap();
-        HttpResponse::InternalServerError().body(webpage)
+        HttpResponse::InternalServerError()
+            .content_type(ContentType::html())
+            .body(webpage)
     }
 }
