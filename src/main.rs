@@ -13,7 +13,9 @@ use std::str::FromStr;
 use actix_files::Files;
 use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
-    get, web, App, Error as WebError, HttpResponse, HttpServer, Responder,
+    get,
+    middleware::Compress,
+    web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
 use chrono::Duration as DateDuration;
 use log::info;
@@ -91,6 +93,7 @@ async fn main() -> IOResult<()> {
             Files::new(STATIC_URL, String::from("static")).default_handler(invalid_url);
         App::new()
             .app_data(viewer.clone())
+            .wrap(Compress::default())
             .service(latest_comic)
             .service(comic_page)
             .service(random_comic)
