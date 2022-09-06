@@ -232,7 +232,7 @@ impl Viewer {
     /// # Arguments
     /// * `err` - The actual internal server error
     pub fn serve_500(err: AppError) -> HttpResponse {
-        let error = &format!("{:?}", err);
+        let error = &format!("{}", err);
         let webpage = ErrorTemplate { error, repo: REPO }.render().unwrap();
         HttpResponse::InternalServerError()
             .content_type(ContentType::html())
