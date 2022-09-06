@@ -6,8 +6,9 @@ It uses the third-party [Rust Buildpack](https://elements.heroku.com/buildpacks/
 ## Instructions
 Run the script `cache_init.sql` at the beginning to create the required tables in the cache:
 ```sh
-heroku pg:psql -a dilbert-viewer -f cache_init.sql
+heroku pg:psql -a app-name -f cache_init.sql
 ```
+Here, `app-name` is the name of your Heroku app that has a PostgreSQL database configured.
 
 ### Local Testing
 #### Setup
@@ -22,8 +23,9 @@ To install the Heroku CLI, please refer to [Heroku's installation guide](https:/
 
 2. Set the required environment variables and run the viewer locally with the Heroku CLI:
     ```sh
-    DATABASE_URL=$(heroku config:get DATABASE_URL -a dilbert-viewer) heroku local web
+    DATABASE_URL=$(heroku config:get DATABASE_URL -a app-name) heroku local web
     ```
+    Here, `app-name` is the name of your Heroku app that has a PostgreSQL database configured.
     
     If you want to run the viewer without a PostgreSQL database, then simply run it without the environment variable:
     ```sh
