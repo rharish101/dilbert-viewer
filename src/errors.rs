@@ -1,107 +1,62 @@
 //! Custom error definitions
 use std::env;
 
-use askama::Error as TemplateError;
-use chrono::format::ParseError;
 use deadpool_postgres::{BuildError, PoolError};
-use native_tls::Error as TlsError;
-use regex::Error as RegexError;
-use reqwest::Error as HttpError;
+use thiserror::Error;
 use tokio_postgres::error::Error as PgError;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 /// Errors when initializing the database pool
 pub enum DbInitError {
     /// Error reading the DB URL from the environment
-    Env(env::VarError),
+    #[error("Missing environment variable for the database URL: {0}")]
+    Env(#[from] env::VarError),
     /// Error parsing the DB URL
-    Db(PgError),
+    #[error("Error parsing the database URL: {0}")]
+    Db(#[from] PgError),
     /// Error in building an SSL connector
-    Tls(TlsError),
+    #[error("Error building an SSL connector: {0}")]
+    Tls(#[from] native_tls::Error),
     /// Error in building the DB connection pool
-    Pool(BuildError),
+    #[error("Error building the database connection pool: {0}")]
+    Pool(#[from] BuildError),
 }
 
-impl From<env::VarError> for DbInitError {
-    fn from(err: env::VarError) -> Self {
-        Self::Env(err)
-    }
-}
-
-impl From<PgError> for DbInitError {
-    fn from(err: PgError) -> Self {
-        Self::Db(err)
-    }
-}
-
-impl From<TlsError> for DbInitError {
-    fn from(err: TlsError) -> Self {
-        Self::Tls(err)
-    }
-}
-
-impl From<BuildError> for DbInitError {
-    fn from(err: BuildError) -> Self {
-        Self::Pool(err)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Error, Debug)]
 /// All errors raised by the viewer app
 pub enum AppError {
     /// Errors in getting a connection from the DB pool, or when executing a DB query
-    Db(PoolError),
+    #[error("Database pool error: {0}")]
+    Db(#[from] PoolError),
     /// Errors in initializing the DB
-    DbInit(DbInitError),
+    #[error("Error initializing the database: {0}")]
+    DbInit(#[from] DbInitError),
     /// Errors when building an HTTP client, or when making HTTP requests
-    Http(HttpError),
+    #[error("HTTP client error: {0}")]
+    Http(#[from] reqwest::Error),
     /// Errors in parsing dates
-    DateParse(ParseError),
+    #[error("Error parsing date: {0}")]
+    DateParse(#[from] chrono::format::ParseError),
     /// Errors in regex pattern syntax, or when parsing strings using regex
-    Regex(RegexError, String),
+    #[error("Regex error: {0}")]
+    Regex(regex::Error, String),
     /// Errors in building HTML templates
-    Template(TemplateError),
+    #[error("Error building HTML template: {0}")]
+    Template(#[from] askama::Error),
     /// Miscellaneous internal errors
+    #[error("Internal error: {0}")]
     Internal(String),
     /// Errors in scraping info from "dilbert.com"
+    #[error("Scraping error: {0}")]
     Scrape(String),
     /// Errors when no comic exists for a given date
+    #[error("{0}")]
     NotFound(String),
-}
-
-impl From<PoolError> for AppError {
-    fn from(err: PoolError) -> Self {
-        Self::Db(err)
-    }
-}
-
-impl From<DbInitError> for AppError {
-    fn from(err: DbInitError) -> Self {
-        Self::DbInit(err)
-    }
 }
 
 impl From<PgError> for AppError {
     fn from(err: PgError) -> Self {
         Self::Db(PoolError::Backend(err))
-    }
-}
-
-impl From<HttpError> for AppError {
-    fn from(err: HttpError) -> Self {
-        Self::Http(err)
-    }
-}
-
-impl From<ParseError> for AppError {
-    fn from(err: ParseError) -> Self {
-        Self::DateParse(err)
-    }
-}
-
-impl From<TemplateError> for AppError {
-    fn from(err: TemplateError) -> Self {
-        Self::Template(err)
     }
 }
 
