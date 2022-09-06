@@ -1,6 +1,7 @@
 //! Custom error definitions
 use std::env;
 
+use awc::error::{PayloadError, SendRequestError};
 use deadpool_postgres::{BuildError, PoolError};
 use thiserror::Error;
 use tokio_postgres::error::Error as PgError;
@@ -23,6 +24,16 @@ pub enum DbInitError {
 }
 
 #[derive(Error, Debug)]
+pub enum HttpError {
+    /// Error sending a request
+    #[error("Error sending request: {0}")]
+    SendRequest(#[from] SendRequestError),
+    /// Error processing the response payload
+    #[error("Error parsing payload: {0}")]
+    Payload(#[from] PayloadError),
+}
+
+#[derive(Error, Debug)]
 /// All errors raised by the viewer app
 pub enum AppError {
     /// Errors in getting a connection from the DB pool, or when executing a DB query
@@ -33,7 +44,7 @@ pub enum AppError {
     DbInit(#[from] DbInitError),
     /// Errors when building an HTTP client, or when making HTTP requests
     #[error("HTTP client error: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(HttpError),
     /// Errors in parsing dates
     #[error("Error parsing date: {0}")]
     DateParse(#[from] chrono::format::ParseError),
@@ -52,6 +63,15 @@ pub enum AppError {
     /// Errors when no comic exists for a given date
     #[error("{0}")]
     NotFound(String),
+}
+
+impl<E> From<E> for AppError
+where
+    E: Into<HttpError>,
+{
+    fn from(err: E) -> Self {
+        Self::Http(err.into())
+    }
 }
 
 impl From<PgError> for AppError {

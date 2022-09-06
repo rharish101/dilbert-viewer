@@ -2,10 +2,10 @@
 use std::cmp::Ordering;
 
 use async_trait::async_trait;
+use awc::{http::StatusCode, Client as HttpClient};
 use chrono::Duration;
 use deadpool_postgres::Pool;
 use log::{info, warn};
-use reqwest::Client as HttpClient;
 use tokio_postgres::types::ToSql;
 
 use crate::constants::{DATE_FMT, LATEST_DATE_REFRESH, SRC_PREFIX};
@@ -55,7 +55,7 @@ impl LatestDateScraper {
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl Scraper<String, str, ()> for LatestDateScraper {
     /// Get the cached latest date from the database.
     ///
@@ -115,7 +115,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         info!("Trying date \"{}\" for latest comic", latest);
         let resp = http_client.get(url).send().await?;
 
-        if resp.url().path() == "/" {
+        if let StatusCode::FOUND = resp.status() {
             // Redirected to homepage, implying that there's no comic for this date. There must
             // be a comic for the previous date, so use that.
             let date = (curr_date() - Duration::days(1))

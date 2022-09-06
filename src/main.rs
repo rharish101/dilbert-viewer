@@ -9,6 +9,7 @@ mod utils;
 use std::env;
 use std::io::Result as IOResult;
 use std::str::FromStr;
+use std::time::Duration as TimeDuration;
 
 use actix_files::Files;
 use actix_web::{
@@ -18,12 +19,34 @@ use actix_web::{
     web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
 use chrono::Duration as DateDuration;
+use deadpool_postgres::{Manager, Pool};
 use log::info;
+use native_tls::TlsConnector;
+use postgres_native_tls::MakeTlsConnector;
 use rand::{thread_rng, Rng};
+use tokio_postgres::config::{Config as PgConfig, SslMode};
 
 use crate::app::Viewer;
-use crate::constants::{DATE_FMT, FIRST_COMIC, STATIC_URL};
+use crate::constants::{DATE_FMT, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, STATIC_URL};
+use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
+
+/// Initialize the database connection pool for caching data.
+fn get_db_pool() -> Result<Pool, DbInitError> {
+    // Heroku needs SSL for its PostgreSQL DB, but uses a self-signed certificate. So simply
+    // disable verification while keeping SSL.
+    let tls_connector = TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()?;
+    let tls = MakeTlsConnector::new(tls_connector);
+
+    let mut pg_config = PgConfig::from_str(env::var("DATABASE_URL")?.as_str())?;
+    pg_config.ssl_mode(SslMode::Require); // Heroku needs this.
+    pg_config.connect_timeout(TimeDuration::from_secs(DB_TIMEOUT));
+
+    let manager = Manager::new(pg_config, tls);
+    Ok(Pool::builder(manager).max_size(MAX_DB_CONN).build()?)
+}
 
 /// Serve the latest comic.
 #[get("/")]
@@ -83,16 +106,20 @@ async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
 async fn main() -> IOResult<()> {
     pretty_env_logger::init();
 
-    let viewer = web::Data::new(Viewer::new().await.unwrap());
     let host = format!("0.0.0.0:{}", env::var("PORT").unwrap());
     info!("Starting server at {}", host);
 
+    // Create all worker-shared (i.e. thread-safe) structs here
+    let db_pool = get_db_pool().unwrap();
+
     let mut server = HttpServer::new(move || {
-        // This needs to be different for every worker, so invoke it here instead of outside.
+        // Create all worker-specific (i.e. thread-unsafe) structs here
+        let viewer = Viewer::new(db_pool.clone()).unwrap();
         let static_service =
             Files::new(STATIC_URL, String::from("static")).default_handler(invalid_url);
+
         App::new()
-            .app_data(viewer.clone())
+            .app_data(web::Data::new(viewer))
             .wrap(Compress::default())
             .service(latest_comic)
             .service(comic_page)

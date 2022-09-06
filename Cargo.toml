@@ -13,6 +13,7 @@ actix-files = "0.6.0"
 actix-web = "4.0.1"
 askama = "0.11.0"
 async-trait = "0.1.52"
+awc = { version = "3.0.1", features = ["openssl"] }
 chrono = "0.4.19"
 deadpool-postgres = "0.10.1"
 futures = "0.3.19"
@@ -24,7 +25,6 @@ postgres-native-tls = "0.5.0"
 pretty_env_logger = "0.4.0"
 rand = "0.8.4"
 regex = "1.5.5"
-reqwest = "0.11.9"
 thiserror = "1.0.34"
 tokio = { version = "1.15.0", features = ["rt", "sync"] }
 tokio-postgres = { version = "0.7.5", features = ["with-chrono-0_4"] }

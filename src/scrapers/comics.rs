@@ -1,12 +1,12 @@
 //! Scraper to get info for requested Dilbert comics
 use async_trait::async_trait;
+use awc::{http::StatusCode, Client as HttpClient};
 use chrono::NaiveDate;
 use deadpool_postgres::Pool;
 use html_escape::decode_html_entities;
 use itertools::Itertools;
 use log::{debug, error, info, warn};
 use regex::{Error as RegexError, Match, Regex};
-use reqwest::Client as HttpClient;
 use tokio::sync::Mutex;
 use tokio_postgres::error::SqlState;
 
@@ -140,7 +140,7 @@ impl ComicScraper {
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl Scraper<ComicData, ComicData, str> for ComicScraper {
     /// Get the cached comic data from the database.
     ///
@@ -232,18 +232,22 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
     /// Scrape the comic data of the requested date from the source.
     async fn scrape_data(&self, http_client: &HttpClient, date: &str) -> AppResult<ComicData> {
         let url = String::from(SRC_PREFIX) + date;
-        let resp = http_client.get(url).send().await?;
+        let mut resp = http_client.get(url).send().await?;
 
-        if resp.url().path() == "/" {
+        if let StatusCode::FOUND = resp.status() {
             // Redirected to homepage, implying that there's no comic for this date
             return Err(AppError::NotFound(format!("Comic for {} not found", date)));
         }
 
-        let content = resp.text().await?;
+        let bytes = resp.body().await?;
+        let content = match std::str::from_utf8(&bytes) {
+            Ok(text) => text,
+            Err(_) => return Err(AppError::Scrape(String::from("Response is not UTF-8"))),
+        };
 
         let title = if let Some(mat) = self
             .title_regex
-            .captures(&content)
+            .captures(content)
             .and_then(|captures| captures.get(1))
         {
             decode_html_entities(mat.as_str()).into_owned()
@@ -254,7 +258,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
 
         let date_str = if let Some(captures) = self
             .date_str_regex
-            .captures(&content)
+            .captures(content)
             .and_then(|captures| -> Option<Vec<Match>> { captures.iter().collect() })
         {
             captures[1..].iter().map(|mat| mat.as_str()).join(" ")
@@ -266,7 +270,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
 
         let img_url = if let Some(mat) = self
             .img_url_regex
-            .captures(&content)
+            .captures(content)
             .and_then(|captures| captures.get(1))
         {
             String::from(mat.as_str())

@@ -2,13 +2,13 @@
 use std::borrow::Borrow;
 
 use async_trait::async_trait;
+use awc::Client as HttpClient;
 use deadpool_postgres::Pool;
 use log::{error, info};
-use reqwest::Client as HttpClient;
 
 use crate::errors::AppResult;
 
-#[async_trait]
+#[async_trait(?Send)]
 pub(crate) trait Scraper<Data: Send + Sync, DataBorrowed: Sync + ?Sized, Ref: Sync + ?Sized>
 where
     // This allows using &str instead of &String, when `Data` is String.

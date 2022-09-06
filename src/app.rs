@@ -1,23 +1,16 @@
 //! The viewer app struct and its methods
 use std::cmp::{max, min};
-use std::env;
-use std::str::FromStr;
 use std::time::Duration as TimeDuration;
 
 use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
+use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
-use deadpool_postgres::{Manager, Pool};
+use deadpool_postgres::Pool;
 use log::info;
-use native_tls::TlsConnector;
-use postgres_native_tls::MakeTlsConnector;
-use reqwest::{Client as HttpClient, Error as HttpError};
-use tokio_postgres::config::{Config as PgConfig, SslMode};
 
-use crate::constants::{
-    ALT_DATE_FMT, DATE_FMT, DB_TIMEOUT, FETCH_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, REPO, SRC_PREFIX,
-};
-use crate::errors::{AppError, AppResult, DbInitError};
+use crate::constants::{ALT_DATE_FMT, DATE_FMT, FETCH_TIMEOUT, FIRST_COMIC, REPO, SRC_PREFIX};
+use crate::errors::{AppError, AppResult};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 use crate::utils::str_to_date;
@@ -34,44 +27,20 @@ pub struct Viewer {
     latest_date_scraper: LatestDateScraper,
 }
 
-/// Initialize the database connection pool for caching data.
-async fn get_db_pool() -> Result<Pool, DbInitError> {
-    // Heroku needs SSL for its PostgreSQL DB, but uses a self-signed certificate. So simply
-    // disable verification while keeping SSL.
-    let tls_connector = TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()?;
-    let tls = MakeTlsConnector::new(tls_connector);
-
-    let mut pg_config = PgConfig::from_str(env::var("DATABASE_URL")?.as_str())?;
-    pg_config.ssl_mode(SslMode::Require); // Heroku needs this.
-    pg_config.connect_timeout(TimeDuration::from_secs(DB_TIMEOUT));
-
-    let manager = Manager::new(pg_config, tls);
-    Ok(Pool::builder(manager).max_size(MAX_DB_CONN).build()?)
-}
-
 /// Initialize the client session for scraping comics.
-async fn get_http_client() -> Result<HttpClient, HttpError> {
+fn get_http_client() -> HttpClient {
     let timeout = TimeDuration::from_secs(FETCH_TIMEOUT);
-    HttpClient::builder().timeout(timeout).build()
+    HttpClient::builder().timeout(timeout).finish()
 }
 
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub async fn new() -> AppResult<Self> {
-        let (db_pool_res, http_client_res) = futures::join!(get_db_pool(), get_http_client());
-        let db_pool = db_pool_res?;
-        let http_client = http_client_res?;
-
-        let comic_scraper = ComicScraper::new()?;
-        let latest_date_scraper = LatestDateScraper::new();
-
+    pub fn new(db_pool: Pool) -> AppResult<Self> {
         Ok(Self {
             db_pool,
-            http_client,
-            comic_scraper,
-            latest_date_scraper,
+            http_client: get_http_client(),
+            comic_scraper: ComicScraper::new()?,
+            latest_date_scraper: LatestDateScraper::new(),
         })
     }
 
