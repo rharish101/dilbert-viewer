@@ -20,7 +20,7 @@ use actix_web::{
 };
 use chrono::Duration as DateDuration;
 use deadpool_postgres::{Manager, Pool};
-use log::info;
+use log::{error, info};
 use native_tls::TlsConnector;
 use postgres_native_tls::MakeTlsConnector;
 use rand::{thread_rng, Rng};
@@ -110,7 +110,16 @@ async fn main() -> IOResult<()> {
     info!("Starting server at {}", host);
 
     // Create all worker-shared (i.e. thread-safe) structs here
-    let db_pool = get_db_pool().unwrap();
+    let db_pool = match get_db_pool() {
+        Ok(pool) => Some(pool),
+        Err(err) => {
+            error!(
+                "Couldn't create DB pool: {}. No caching will be available.",
+                err
+            );
+            None
+        }
+    };
 
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here

@@ -17,7 +17,7 @@ use crate::utils::str_to_date;
 
 pub struct Viewer {
     /// The pool of connections to the database
-    db_pool: Pool,
+    db_pool: Option<Pool>,
     /// The HTTP client for connecting to the server
     http_client: HttpClient,
 
@@ -35,7 +35,7 @@ fn get_http_client() -> HttpClient {
 
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db_pool: Pool) -> AppResult<Self> {
+    pub fn new(db_pool: Option<Pool>) -> AppResult<Self> {
         Ok(Self {
             db_pool,
             http_client: get_http_client(),

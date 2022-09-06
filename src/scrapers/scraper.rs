@@ -21,7 +21,11 @@ where
     /// # Arguments:
     /// * `db_pool` - The pool of connections to the DB
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn get_cached_data(&self, db_pool: &Pool, reference: &Ref) -> AppResult<Option<Data>>;
+    async fn get_cached_data(
+        &self,
+        db_pool: &Option<Pool>,
+        reference: &Ref,
+    ) -> AppResult<Option<Data>>;
 
     /// Cache data into the database.
     ///
@@ -31,7 +35,7 @@ where
     /// * `reference` - The reference to the data that is to be retrieved
     async fn cache_data(
         &self,
-        db_pool: &Pool,
+        db_pool: &Option<Pool>,
         data: &DataBorrowed,
         reference: &Ref,
     ) -> AppResult<()>;
@@ -51,7 +55,12 @@ where
     /// * `db_pool` - The pool of connections to the DB
     /// * `data` - The data that is to be cached
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn safely_cache_data(&self, db_pool: &Pool, data: &DataBorrowed, reference: &Ref) {
+    async fn safely_cache_data(
+        &self,
+        db_pool: &Option<Pool>,
+        data: &DataBorrowed,
+        reference: &Ref,
+    ) {
         if let Err(err) = self.cache_data(db_pool, data, reference).await {
             error!("{:?}", err);
         }
@@ -66,7 +75,7 @@ where
     ///                 reference to the requested data
     async fn get_data(
         &self,
-        db_pool: &Pool,
+        db_pool: &Option<Pool>,
         http_client: &HttpClient,
         reference: &Ref,
     ) -> AppResult<Data> {

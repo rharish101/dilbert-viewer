@@ -39,7 +39,7 @@ impl LatestDateScraper {
     /// * `http_client` - The HTTP client for scraping from "dilbert.com"
     pub(crate) async fn get_latest_date(
         &self,
-        db_pool: &Pool,
+        db_pool: &Option<Pool>,
         http_client: &HttpClient,
     ) -> AppResult<String> {
         self.get_data(db_pool, http_client, &()).await
@@ -50,7 +50,11 @@ impl LatestDateScraper {
     /// # Arguments
     /// * `db_pool` - The pool of connections to the DB
     /// * `date` - The date of the latest comic
-    pub(crate) async fn update_latest_date(&self, db_pool: &Pool, date: &str) -> AppResult<()> {
+    pub(crate) async fn update_latest_date(
+        &self,
+        db_pool: &Option<Pool>,
+        date: &str,
+    ) -> AppResult<()> {
         self.cache_data(db_pool, date, &()).await
     }
 }
@@ -61,12 +65,21 @@ impl Scraper<String, str, ()> for LatestDateScraper {
     ///
     /// If the latest date entry is stale (i.e. it was updated a long time back), or it wasn't
     /// found in the cache, None is returned.
-    async fn get_cached_data(&self, db_pool: &Pool, _reference: &()) -> AppResult<Option<String>> {
-        let rows = db_pool
-            .get()
-            .await?
-            .query(LATEST_DATE_STMT, &[&LATEST_DATE_REFRESH])
-            .await?;
+    async fn get_cached_data(
+        &self,
+        db_pool: &Option<Pool>,
+        _reference: &(),
+    ) -> AppResult<Option<String>> {
+        let rows = if let Some(db_pool) = db_pool {
+            db_pool
+                .get()
+                .await?
+                .query(LATEST_DATE_STMT, &[&LATEST_DATE_REFRESH])
+                .await?
+        } else {
+            return Ok(None);
+        };
+
         if rows.is_empty() {
             Ok(None)
         } else {
@@ -75,8 +88,17 @@ impl Scraper<String, str, ()> for LatestDateScraper {
     }
 
     /// Cache the latest date into the database.
-    async fn cache_data(&self, db_pool: &Pool, date: &str, _reference: &()) -> AppResult<()> {
-        let db_client = db_pool.get().await?;
+    async fn cache_data(
+        &self,
+        db_pool: &Option<Pool>,
+        date: &str,
+        _reference: &(),
+    ) -> AppResult<()> {
+        let db_client = if let Some(db_pool) = db_pool {
+            db_pool.get().await?
+        } else {
+            return Ok(());
+        };
         let query_params: [&(dyn ToSql + Sync); 1] = [&str_to_date(date, DATE_FMT)?];
         let rows_updated = db_client
             .execute(UPDATE_DATE_STMT, query_params.as_slice())

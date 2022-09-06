@@ -24,6 +24,11 @@ To install the Heroku CLI, please refer to [Heroku's installation guide](https:/
     ```sh
     DATABASE_URL=$(heroku config:get DATABASE_URL -a dilbert-viewer) heroku local web
     ```
+    
+    If you want to run the viewer without a PostgreSQL database, then simply run it without the environment variable:
+    ```sh
+    heroku local web
+    ```
 
 ### For Contributing
 [pre-commit](https://pre-commit.com/) is used for managing hooks that run before each commit, to ensure code quality and run some basic tests.

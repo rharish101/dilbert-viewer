@@ -80,22 +80,28 @@ impl ComicScraper {
     }
 
     /// Update the last used date for the given comic.
-    async fn update_last_used(db_pool: &Pool, date: &NaiveDate) -> AppResult<()> {
+    async fn update_last_used(db_pool: &Option<Pool>, date: &NaiveDate) -> AppResult<()> {
         info!("Updating `last_used` for data in cache");
-        db_pool
-            .get()
-            .await?
-            .execute(UPDATE_LAST_USED_STMT, &[&date])
-            .await?;
+        if let Some(db_pool) = db_pool {
+            db_pool
+                .get()
+                .await?
+                .execute(UPDATE_LAST_USED_STMT, &[&date])
+                .await?;
+        };
         Ok(())
     }
 
     /// Remove excess rows from the cache.
-    async fn clean_cache(db_pool: &Pool) -> AppResult<()> {
+    async fn clean_cache(db_pool: &Option<Pool>) -> AppResult<()> {
         // This is an approximate of the no. of rows in the `comic_cache` table.  This is much
         // faster than the accurate measurement, as given here:
         // https://wiki.postgresql.org/wiki/Count_estimate
-        let db_client = db_pool.get().await?;
+        let db_client = if let Some(db_pool) = db_pool {
+            db_pool.get().await?
+        } else {
+            return Ok(());
+        };
         let approx_rows: f32 = db_client
             .query_one(APPROX_ROWS_STMT, &[])
             .await?
@@ -128,7 +134,7 @@ impl ComicScraper {
     /// * `date` - The date of the requested comic
     pub(crate) async fn get_comic_data(
         &self,
-        db_pool: &Pool,
+        db_pool: &Option<Pool>,
         http_client: &HttpClient,
         date: &str,
     ) -> AppResult<Option<ComicData>> {
@@ -146,18 +152,27 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
     ///
     /// If the comic date entry is stale (i.e. it was updated a long time back), or it wasn't
     /// found in the cache, None is returned.
-    async fn get_cached_data(&self, db_pool: &Pool, date: &str) -> AppResult<Option<ComicData>> {
+    async fn get_cached_data(
+        &self,
+        db_pool: &Option<Pool>,
+        date: &str,
+    ) -> AppResult<Option<ComicData>> {
         let date = str_to_date(date, DATE_FMT)?;
         // The other columns in the table are: `comic`, `last_used`. `comic` is not required here,
         // as we already have the date as a function argument. In case the date given here is
         // invalid (i.e. it would redirect to a comic with a different date), we cannot retrieve
         // the correct date from the cache, as we aren't caching the mapping of incorrect:correct
         // dates. `last_used` will be updated later.
-        let rows = db_pool
-            .get()
-            .await?
-            .query(FETCH_COMIC_STMT, &[&date])
-            .await?;
+        let rows = if let Some(db_pool) = db_pool {
+            db_pool
+                .get()
+                .await?
+                .query(FETCH_COMIC_STMT, &[&date])
+                .await?
+        } else {
+            return Ok(None);
+        };
+
         if rows.is_empty() {
             // This means that the comic for this date wasn't cached, or the date is invalid (i.e.
             // it would redirect to a comic with a different date).
@@ -179,12 +194,21 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
     }
 
     /// Cache the comic data into the database.
-    async fn cache_data(&self, db_pool: &Pool, data: &ComicData, _date: &str) -> AppResult<()> {
+    async fn cache_data(
+        &self,
+        db_pool: &Option<Pool>,
+        data: &ComicData,
+        _date: &str,
+    ) -> AppResult<()> {
+        let db_client = if let Some(db_pool) = db_pool {
+            db_pool.get().await?
+        } else {
+            return Ok(());
+        };
+
         // The given date can be invalid (i.e. we may have been redirected to a comic with a
         // different date), hence get the correct date from the scraped data.
         let date = str_to_date(&data.date_str, ALT_DATE_FMT)?;
-
-        let db_client = db_pool.get().await?;
 
         // This lock ensures that the no. of rows in the cache doesn't increase. This can happen,
         // as the code involves first clearing excess rows, then adding a new row. Therefore, the
