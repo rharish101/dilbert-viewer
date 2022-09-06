@@ -241,41 +241,35 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
 
         let content = resp.text().await?;
 
-        let title = if let Some(captures) = self.title_regex.captures(&content) {
-            if let Some(mat) = captures.get(1) {
-                decode_html_entities(mat.as_str()).into_owned()
-            } else {
-                // Some comics don't have a title. This is mostly for older comics.
-                String::from("")
-            }
+        let title = if let Some(mat) = self
+            .title_regex
+            .captures(&content)
+            .and_then(|captures| captures.get(1))
+        {
+            decode_html_entities(mat.as_str()).into_owned()
         } else {
             // Some comics don't have a title. This is mostly for older comics.
             String::from("")
         };
 
-        let date_str = if let Some(captures) = self.date_str_regex.captures(&content) {
-            let matches: Option<Vec<Match>> = captures.iter().collect();
-            if let Some(captures) = matches {
-                captures[1..].iter().map(|mat| mat.as_str()).join(" ")
-            } else {
-                return Err(AppError::Scrape(String::from(
-                    "Error in scraping the date string",
-                )));
-            }
+        let date_str = if let Some(captures) = self
+            .date_str_regex
+            .captures(&content)
+            .and_then(|captures| -> Option<Vec<Match>> { captures.iter().collect() })
+        {
+            captures[1..].iter().map(|mat| mat.as_str()).join(" ")
         } else {
             return Err(AppError::Scrape(String::from(
                 "Error in scraping the date string",
             )));
         };
 
-        let img_url = if let Some(captures) = self.img_url_regex.captures(&content) {
-            if let Some(mat) = captures.get(1) {
-                String::from(mat.as_str())
-            } else {
-                return Err(AppError::Scrape(String::from(
-                    "Error in scraping the image's URL",
-                )));
-            }
+        let img_url = if let Some(mat) = self
+            .img_url_regex
+            .captures(&content)
+            .and_then(|captures| captures.get(1))
+        {
+            String::from(mat.as_str())
         } else {
             return Err(AppError::Scrape(String::from(
                 "Error in scraping the image's URL",
