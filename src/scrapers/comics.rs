@@ -26,7 +26,7 @@ const FETCH_COMIC_STMT: &str = "SELECT img_url, title FROM comic_cache WHERE com
 const INSERT_COMIC_STMT: &str =
     "INSERT INTO comic_cache (comic, img_url, title) VALUES ($1, $2, $3);";
 
-pub(crate) struct ComicData {
+pub struct ComicData {
     /// The title of the comic
     pub title: String,
 
@@ -45,7 +45,7 @@ pub(crate) struct ComicData {
 ///
 /// This scraper takes a date (in the format used by "dilbert.com") as input.
 /// It returns the info about the comic.
-pub(crate) struct ComicScraper {
+pub struct ComicScraper {
     insert_comic_lock: Mutex<()>,
 
     // All regexes for scraping
@@ -60,7 +60,7 @@ fn regex_to_app_error(err: RegexError, msg: &str) -> AppError {
 
 impl ComicScraper {
     /// Initialize a comics scraper.
-    pub(crate) fn new() -> AppResult<ComicScraper> {
+    pub fn new() -> AppResult<Self> {
         let title_regex = Regex::new("<span class=\"comic-title-name\">([^<]+)</span>")
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic title"))?;
         let date_str_regex = Regex::new(
@@ -80,7 +80,7 @@ impl ComicScraper {
     }
 
     /// Update the last used date for the given comic.
-    async fn update_last_used(db_pool: &Option<Pool>, date: &NaiveDate) -> AppResult<()> {
+    async fn update_last_used(db_pool: &Option<Pool>, date: NaiveDate) -> AppResult<()> {
         info!("Updating `last_used` for data in cache");
         if let Some(db_pool) = db_pool {
             db_pool
@@ -132,14 +132,14 @@ impl ComicScraper {
     /// * `db_pool` - The pool of connections to the DB
     /// * `http_client` - The HTTP client for scraping from the source
     /// * `date` - The date of the requested comic
-    pub(crate) async fn get_comic_data(
+    pub async fn get_comic_data(
         &self,
         db_pool: &Option<Pool>,
         http_client: &HttpClient,
         date: &str,
     ) -> AppResult<Option<ComicData>> {
         match self.get_data(db_pool, http_client, date).await {
-            Ok(data) => Ok(Some(data)),
+            Ok(comic_data) => Ok(Some(comic_data)),
             Err(AppError::NotFound(_)) => Ok(None),
             Err(err) => Err(err),
         }
@@ -180,7 +180,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         }
 
         let comic_row = &rows[0];
-        let data = ComicData {
+        let comic_data = ComicData {
             title: comic_row.try_get(1)?,
             date_str: date.format(ALT_DATE_FMT).to_string(),
             img_url: comic_row.try_get(0)?,
@@ -188,16 +188,16 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
 
         // Update `last_used`, so that this comic isn't accidently de-cached. We want to keep the
         // most recently used comics in the cache, and we are currently using this comic.
-        ComicScraper::update_last_used(db_pool, &date).await?;
+        Self::update_last_used(db_pool, date).await?;
 
-        Ok(Some(data))
+        Ok(Some(comic_data))
     }
 
     /// Cache the comic data into the database.
     async fn cache_data(
         &self,
         db_pool: &Option<Pool>,
-        data: &ComicData,
+        comic_data: &ComicData,
         _date: &str,
     ) -> AppResult<()> {
         let db_client = if let Some(db_pool) = db_pool {
@@ -208,7 +208,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
 
         // The given date can be invalid (i.e. we may have been redirected to a comic with a
         // different date), hence get the correct date from the scraped data.
-        let date = str_to_date(&data.date_str, ALT_DATE_FMT)?;
+        let date = str_to_date(&comic_data.date_str, ALT_DATE_FMT)?;
 
         // This lock ensures that the no. of rows in the cache doesn't increase. This can happen,
         // as the code involves first clearing excess rows, then adding a new row. Therefore, the
@@ -228,7 +228,10 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         }
 
         if let Err(err) = db_client
-            .execute(INSERT_COMIC_STMT, &[&date, &data.img_url, &data.title])
+            .execute(
+                INSERT_COMIC_STMT,
+                &[&date, &comic_data.img_url, &comic_data.title],
+            )
             .await
         {
             if let Some(&SqlState::UNIQUE_VIOLATION) = err.code() {
@@ -258,7 +261,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         let url = String::from(SRC_PREFIX) + date;
         let mut resp = http_client.get(url).send().await?;
 
-        if let StatusCode::FOUND = resp.status() {
+        if resp.status() == StatusCode::FOUND {
             // Redirected to homepage, implying that there's no comic for this date
             return Err(AppError::NotFound(format!("Comic for {} not found", date)));
         }
@@ -285,7 +288,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             .captures(content)
             .and_then(|captures| -> Option<Vec<Match>> { captures.iter().collect() })
         {
-            captures[1..].iter().map(|mat| mat.as_str()).join(" ")
+            captures[1..].iter().map(Match::as_str).join(" ")
         } else {
             return Err(AppError::Scrape(String::from(
                 "Error in scraping the date string",

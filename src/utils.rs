@@ -4,7 +4,7 @@ use chrono::{format::ParseResult, NaiveDate, Utc};
 /// Return the current date.
 ///
 /// The timezone is fixed to UTC so that the code is independent of local time.
-pub(crate) fn curr_date() -> NaiveDate {
+pub fn curr_date() -> NaiveDate {
     Utc::today().naive_utc()
 }
 
@@ -13,6 +13,6 @@ pub(crate) fn curr_date() -> NaiveDate {
 /// # Arguments
 /// * `date_str` - The input date
 /// * `fmt` - The format of the input date
-pub(crate) fn str_to_date(date: &str, fmt: &str) -> ParseResult<NaiveDate> {
+pub fn str_to_date(date: &str, fmt: &str) -> ParseResult<NaiveDate> {
     NaiveDate::parse_from_str(date, fmt)
 }

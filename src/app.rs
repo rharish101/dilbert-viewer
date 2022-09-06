@@ -50,12 +50,12 @@ impl Viewer {
     ///
     /// # Arguments
     /// * `date` - The (possibly corrected) date of the comic
-    /// * `data` - The scraped comic data
+    /// * `comic_data` - The scraped comic data
     /// * `latest_comic` - The date of the latest comic
     async fn serve_template(
         &self,
         date: NaiveDate,
-        data: &ComicData,
+        comic_data: &ComicData,
         latest_comic: NaiveDate,
     ) -> AppResult<HttpResponse> {
         let first_comic = str_to_date(FIRST_COMIC, DATE_FMT)?;
@@ -76,7 +76,7 @@ impl Viewer {
         let permalink = &format!("{}{}", SRC_PREFIX, date.format(DATE_FMT));
 
         let webpage = ComicTemplate {
-            data,
+            data: comic_data,
             date: &date.format(DATE_FMT).to_string(),
             first_comic: &first_comic.format(DATE_FMT).to_string(),
             previous_comic,
@@ -103,8 +103,8 @@ impl Viewer {
         );
         let latest_comic = &latest_comic_res?;
 
-        let comic_data = if let Some(data) = comic_data_res? {
-            data
+        let comic_data = if let Some(comic_data) = comic_data_res? {
+            comic_data
         } else {
             // The data is None if the input is invalid (i.e. "dilbert.com" has redirected to the
             // homepage).
@@ -113,12 +113,12 @@ impl Viewer {
                     "No comic found for {date}, instead displaying the latest comic ({})",
                     latest_comic
                 );
-                let data = self
+                let comic_data = self
                     .comic_scraper
                     .get_comic_data(&self.db_pool, &self.http_client, latest_comic)
                     .await?;
-                if let Some(data) = data {
-                    data
+                if let Some(comic_data) = comic_data {
+                    comic_data
                 } else {
                     // This means that the "latest date", either from the DB or by scraping,
                     // doesn't have a comic. This should NEVER happen.
@@ -170,7 +170,7 @@ impl Viewer {
     pub async fn serve_comic(&self, date: &str, show_latest: bool) -> HttpResponse {
         match self.serve_comic_raw(date, show_latest).await {
             Ok(response) => response,
-            Err(err) => Self::serve_500(err),
+            Err(err) => Self::serve_500(&err),
         }
     }
 
@@ -192,7 +192,7 @@ impl Viewer {
     pub fn serve_404(date: Option<&str>) -> HttpResponse {
         match Self::serve_404_raw(date) {
             Ok(response) => response,
-            Err(err) => Self::serve_500(err),
+            Err(err) => Self::serve_500(&err),
         }
     }
 
@@ -200,7 +200,7 @@ impl Viewer {
     ///
     /// # Arguments
     /// * `err` - The actual internal server error
-    pub fn serve_500(err: AppError) -> HttpResponse {
+    pub fn serve_500(err: &AppError) -> HttpResponse {
         let error = &format!("{}", err);
         let webpage = ErrorTemplate { error, repo: REPO }.render().unwrap();
         HttpResponse::InternalServerError()

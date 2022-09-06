@@ -4,6 +4,6 @@ mod latest;
 mod scraper;
 
 // Re-export for convenience.
-pub(crate) use comics::{ComicData, ComicScraper};
-pub(crate) use latest::LatestDateScraper;
-pub(crate) use scraper::Scraper;
+pub use comics::{ComicData, ComicScraper};
+pub use latest::LatestDateScraper;
+pub use scraper::Scraper;

@@ -6,7 +6,7 @@ use crate::scrapers::ComicData;
 /// The main template for a comic
 #[derive(Template)]
 #[template(path = "comic.html")]
-pub(crate) struct ComicTemplate<'a> {
+pub struct ComicTemplate<'a> {
     /// The scraped comic data
     pub data: &'a ComicData,
 
@@ -33,7 +33,7 @@ pub(crate) struct ComicTemplate<'a> {
 /// The template for a 404 not found page
 #[derive(Template)]
 #[template(path = "not_found.html")]
-pub(crate) struct NotFoundTemplate<'a> {
+pub struct NotFoundTemplate<'a> {
     /// The date of the requested comic, if available
     pub date: Option<&'a str>,
     /// Link to the repo where this code is hosted
@@ -43,7 +43,7 @@ pub(crate) struct NotFoundTemplate<'a> {
 /// The template for a 500 internal server error page
 #[derive(Template)]
 #[template(path = "error.html")]
-pub(crate) struct ErrorTemplate<'a> {
+pub struct ErrorTemplate<'a> {
     /// The error message of the interval server error
     pub error: &'a str,
     /// Link to the repo where this code is hosted

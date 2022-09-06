@@ -9,10 +9,10 @@ use log::{error, info};
 use crate::errors::AppResult;
 
 #[async_trait(?Send)]
-pub(crate) trait Scraper<Data: Send + Sync, DataBorrowed: Sync + ?Sized, Ref: Sync + ?Sized>
+pub trait Scraper<Data, DataBorrowed: Sync + ?Sized, Ref: Sync + ?Sized>
 where
     // This allows using &str instead of &String, when `Data` is String.
-    Data: Borrow<DataBorrowed>,
+    Data: Send + Sync + Borrow<DataBorrowed>,
 {
     /// Retrieve cached data from the database.
     ///

@@ -24,11 +24,11 @@ const UPDATE_DATE_STMT: &str = "UPDATE latest_date SET latest = $1;";
 /// Struct to scrape the date of the latest Dilbert comic.
 ///
 /// This scraper returns that date in the format used by "dilbert.com".
-pub(crate) struct LatestDateScraper {}
+pub struct LatestDateScraper {}
 
 impl LatestDateScraper {
     /// Initialize a latest date scraper.
-    pub(crate) fn new() -> LatestDateScraper {
+    pub fn new() -> Self {
         Self {}
     }
 
@@ -37,7 +37,7 @@ impl LatestDateScraper {
     /// # Arguments
     /// * `db_pool` - The pool of connections to the DB
     /// * `http_client` - The HTTP client for scraping from "dilbert.com"
-    pub(crate) async fn get_latest_date(
+    pub async fn get_latest_date(
         &self,
         db_pool: &Option<Pool>,
         http_client: &HttpClient,
@@ -50,11 +50,7 @@ impl LatestDateScraper {
     /// # Arguments
     /// * `db_pool` - The pool of connections to the DB
     /// * `date` - The date of the latest comic
-    pub(crate) async fn update_latest_date(
-        &self,
-        db_pool: &Option<Pool>,
-        date: &str,
-    ) -> AppResult<()> {
+    pub async fn update_latest_date(&self, db_pool: &Option<Pool>, date: &str) -> AppResult<()> {
         self.cache_data(db_pool, date, &()).await
     }
 }
@@ -137,7 +133,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         info!("Trying date \"{}\" for latest comic", latest);
         let resp = http_client.get(url).send().await?;
 
-        if let StatusCode::FOUND = resp.status() {
+        if resp.status() == StatusCode::FOUND {
             // Redirected to homepage, implying that there's no comic for this date. There must
             // be a comic for the previous date, so use that.
             let date = (curr_date() - Duration::days(1))
