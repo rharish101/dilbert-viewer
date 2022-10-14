@@ -73,6 +73,9 @@ pub enum AppError {
     /// Errors in parsing UTF-8 from files
     #[error("Error parsing UTF-8: {0}")]
     Utf8(#[from] std::str::Utf8Error),
+    /// Errors in minifying HTML/CSS
+    #[error("Error minifying content: {0}")]
+    Minify(#[from] html_minifier::HTMLMinifierError),
     /// Miscellaneous internal errors
     #[error("Internal error: {0}")]
     Internal(String),

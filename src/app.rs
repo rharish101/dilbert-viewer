@@ -23,6 +23,7 @@ use askama::Template;
 use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
 use deadpool_postgres::Pool;
+use html_minifier::{HTMLMinifierError, HTMLMinifierHelper};
 use log::{debug, info};
 
 use crate::constants::{ALT_DATE_FMT, DATE_FMT, FETCH_TIMEOUT, FIRST_COMIC, REPO, SRC_PREFIX};
@@ -58,6 +59,18 @@ impl Viewer {
             comic_scraper: ComicScraper::new()?,
             latest_date_scraper: LatestDateScraper::new(),
         })
+    }
+
+    fn minify_html(html: String) -> AppResult<Vec<u8>> {
+        let mut minifier = HTMLMinifierHelper::new();
+        let mut minified = Vec::new();
+        minifier.digest(&html, &mut minified)?;
+        debug!(
+            "Minified HTML from {} bytes to {}",
+            html.len(),
+            minified.len()
+        );
+        Ok(minified)
     }
 
     /// Serve the rendered HTML given scraped data.
@@ -105,7 +118,7 @@ impl Viewer {
         .render()?;
         Ok(HttpResponse::Ok()
             .content_type(ContentType::html())
-            .body(webpage))
+            .body(Self::minify_html(webpage)?))
     }
 
     /// Serve the requested comic, without handling errors.
@@ -210,10 +223,7 @@ impl Viewer {
         let minified = match minifier::css::minify(css_str) {
             Ok(minified) => minified.to_string(),
             Err(err) => {
-                return Self::serve_500(&AppError::Internal(format!(
-                    "Minification failed: {}",
-                    err
-                )))
+                return Self::serve_500(&AppError::Minify(HTMLMinifierError::CSSError(err)))
             }
         };
         debug!(
@@ -233,7 +243,7 @@ impl Viewer {
         let webpage = NotFoundTemplate { date, repo: REPO }.render()?;
         Ok(HttpResponse::NotFound()
             .content_type(ContentType::html())
-            .body(webpage))
+            .body(Self::minify_html(webpage)?))
     }
 
     /// Serve a 404 not found response for invalid URLs.
@@ -259,6 +269,6 @@ impl Viewer {
         let webpage = ErrorTemplate { error, repo: REPO }.render().unwrap();
         HttpResponse::InternalServerError()
             .content_type(ContentType::html())
-            .body(webpage)
+            .body(Self::minify_html(webpage).unwrap())
     }
 }
