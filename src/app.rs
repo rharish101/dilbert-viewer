@@ -80,8 +80,7 @@ impl Viewer {
     /// * `date` - The (possibly corrected) date of the comic
     /// * `comic_data` - The scraped comic data
     /// * `latest_comic` - The date of the latest comic
-    async fn serve_template(
-        &self,
+    fn serve_template(
         date: NaiveDate,
         comic_data: &ComicData,
         latest_comic: NaiveDate,
@@ -165,26 +164,15 @@ impl Viewer {
 
         // The date of the latest comic is often retrieved from the cache. If there is a comic for
         // a date which is newer than the cached value, then there is a new "latest comic".
-        let to_update = if latest_comic_obj < date_obj {
+        if latest_comic_obj < date_obj {
             latest_comic_obj = date_obj;
-            true
-        } else {
-            false
+            // Cache the new value of the latest comic date
+            self.latest_date_scraper
+                .update_latest_date(&self.db_pool, date)
+                .await?;
         };
 
-        // This will be awaited along with another future for caching data (if required). They will
-        // both be independent of each other, and thus can be run in parallel.
-        let template_future = self.serve_template(date_obj, &comic_data, latest_comic_obj);
-
-        if to_update {
-            // Cache the new value of the latest comic date
-            let update_latest_future = self
-                .latest_date_scraper
-                .update_latest_date(&self.db_pool, date);
-            futures::join!(template_future, update_latest_future).0
-        } else {
-            template_future.await
-        }
+        Self::serve_template(date_obj, &comic_data, latest_comic_obj)
     }
 
     /// Serve the requested comic.

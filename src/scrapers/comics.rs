@@ -250,7 +250,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             )
             .await
         {
-            if let Some(&SqlState::UNIQUE_VIOLATION) = err.code() {
+            if err.code() == Some(&SqlState::UNIQUE_VIOLATION) {
                 // This comic date exists, so some other coroutine has already cached this date in
                 // parallel. So we can simply update `last_used` later (outside the lock).
                 warn!("Trying to cache date {}, which is already cached.", date);
