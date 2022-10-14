@@ -23,11 +23,10 @@ use askama::Template;
 use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
 use deadpool_postgres::Pool;
-use html_minifier::{HTMLMinifierError, HTMLMinifierHelper};
 use log::{debug, info};
 
 use crate::constants::{ALT_DATE_FMT, DATE_FMT, FETCH_TIMEOUT, FIRST_COMIC, REPO, SRC_PREFIX};
-use crate::errors::{AppError, AppResult};
+use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 use crate::utils::str_to_date;
@@ -61,16 +60,16 @@ impl Viewer {
         })
     }
 
-    fn minify_html(html: String) -> AppResult<Vec<u8>> {
-        let mut minifier = HTMLMinifierHelper::new();
-        let mut minified = Vec::new();
-        minifier.digest(&html, &mut minified)?;
-        debug!(
-            "Minified HTML from {} bytes to {}",
-            html.len(),
-            minified.len()
-        );
-        Ok(minified)
+    fn minify_html(mut html: String) -> AppResult<String> {
+        let old_len = html.len();
+        let result = minify_html::in_place_str(html.as_mut_str(), &minify_html::Cfg::new());
+        let new_len = match result {
+            Ok(slice) => slice.len(),
+            Err(err) => Err(MinificationError::Html(err))?,
+        };
+        html.truncate(new_len);
+        debug!("Minified HTML from {} bytes to {}", old_len, html.len());
+        Ok(html)
     }
 
     /// Serve the rendered HTML given scraped data.
@@ -223,7 +222,9 @@ impl Viewer {
         let minified = match minifier::css::minify(css_str) {
             Ok(minified) => minified.to_string(),
             Err(err) => {
-                return Self::serve_500(&AppError::Minify(HTMLMinifierError::CSSError(err)))
+                return Self::serve_500(&AppError::Minify(MinificationError::Css(String::from(
+                    err,
+                ))))
             }
         };
         debug!(
@@ -267,8 +268,13 @@ impl Viewer {
     pub fn serve_500(err: &AppError) -> HttpResponse {
         let error = &format!("{}", err);
         let webpage = ErrorTemplate { error, repo: REPO }.render().unwrap();
+        let minified = if let Ok(html) = Self::minify_html(webpage.clone()) {
+            html
+        } else {
+            webpage
+        };
         HttpResponse::InternalServerError()
             .content_type(ContentType::html())
-            .body(Self::minify_html(webpage).unwrap())
+            .body(minified)
     }
 }

@@ -19,6 +19,7 @@ use std::env;
 
 use awc::error::{PayloadError, SendRequestError};
 use deadpool_postgres::{BuildError, PoolError};
+use minify_html::Error as MinifyHtmlError;
 use thiserror::Error;
 use tokio_postgres::error::Error as PgError;
 
@@ -50,6 +51,22 @@ pub enum HttpError {
 }
 
 #[derive(Error, Debug)]
+pub enum MinificationError {
+    /// Error minifying HTML
+    #[error("Error minifying HTML: {0:?}")]
+    Html(MinifyHtmlError),
+    /// Error minifying CSS
+    #[error("Error minifying CSS: {0}")]
+    Css(String),
+}
+
+impl From<MinifyHtmlError> for MinificationError {
+    fn from(err: MinifyHtmlError) -> Self {
+        Self::Html(err)
+    }
+}
+
+#[derive(Error, Debug)]
 /// All errors raised by the viewer app
 pub enum AppError {
     /// Errors in getting a connection from the DB pool, or when executing a DB query
@@ -74,8 +91,8 @@ pub enum AppError {
     #[error("Error parsing UTF-8: {0}")]
     Utf8(#[from] std::str::Utf8Error),
     /// Errors in minifying HTML/CSS
-    #[error("Error minifying content: {0}")]
-    Minify(#[from] html_minifier::HTMLMinifierError),
+    #[error("Minification error: {0}")]
+    Minify(#[from] MinificationError),
     /// Miscellaneous internal errors
     #[error("Internal error: {0}")]
     Internal(String),
