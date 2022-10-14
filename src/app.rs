@@ -23,7 +23,7 @@ use askama::Template;
 use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
 use deadpool_postgres::Pool;
-use log::info;
+use log::{debug, info};
 
 use crate::constants::{ALT_DATE_FMT, DATE_FMT, FETCH_TIMEOUT, FIRST_COMIC, REPO, SRC_PREFIX};
 use crate::errors::{AppError, AppResult};
@@ -188,6 +188,44 @@ impl Viewer {
             Ok(response) => response,
             Err(err) => Self::serve_500(&err),
         }
+    }
+
+    /// Serve the requested CSS file with minification.
+    ///
+    /// If an error is raised, then a 500 internal server error response is returned.
+    ///
+    /// # Arguments
+    /// * `path` - The path to the CSS file
+    pub async fn serve_css(path: &std::path::Path) -> HttpResponse {
+        let css = if let Ok(text) = tokio::fs::read(path).await {
+            text
+        } else {
+            return Self::serve_404(None);
+        };
+        let css_str = match std::str::from_utf8(&css) {
+            Ok(css_str) => css_str,
+            Err(err) => return Self::serve_500(&AppError::Utf8(err)),
+        };
+
+        let minified = match minifier::css::minify(css_str) {
+            Ok(minified) => minified.to_string(),
+            Err(err) => {
+                return Self::serve_500(&AppError::Internal(format!(
+                    "Minification failed: {}",
+                    err
+                )))
+            }
+        };
+        debug!(
+            "Minified \"{}\" from {} bytes to {}",
+            path.display(),
+            css_str.len(),
+            minified.len()
+        );
+
+        HttpResponse::Ok()
+            .content_type("text/css;charset=utf-8")
+            .body(minified)
     }
 
     /// Serve a 404 not found response for invalid URLs, without handling errors.

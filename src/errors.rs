@@ -70,6 +70,9 @@ pub enum AppError {
     /// Errors in building HTML templates
     #[error("Error building HTML template: {0}")]
     Template(#[from] askama::Error),
+    /// Errors in parsing UTF-8 from files
+    #[error("Error parsing UTF-8: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
     /// Miscellaneous internal errors
     #[error("Internal error: {0}")]
     Internal(String),

@@ -617,6 +617,7 @@ dependencies = [
  "html-escape",
  "itertools",
  "log",
+ "minifier",
  "native-tls",
  "postgres-native-tls",
  "pretty_env_logger",
@@ -1091,6 +1092,12 @@ dependencies = [
  "mime",
  "unicase",
 ]
+
+[[package]]
+name = "minifier"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eb022374af2f446981254e6bf9efb6e2c9e1a53176d395fca02792fd4435729"
 
 [[package]]
 name = "minimal-lexical"

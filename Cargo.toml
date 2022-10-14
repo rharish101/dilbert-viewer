@@ -20,13 +20,14 @@ futures = "0.3.19"
 html-escape = "0.2.9"
 itertools = "0.10.3"
 log = "0.4.14"
+minifier = "0.2.2"
 native-tls = "0.2.8"
 postgres-native-tls = "0.5.0"
 pretty_env_logger = "0.4.0"
 rand = "0.8.4"
 regex = "1.5.5"
 thiserror = "1.0.34"
-tokio = { version = "1.15.0", features = ["rt", "sync"] }
+tokio = { version = "1.15.0", features = ["fs", "rt", "sync"] }
 tokio-postgres = { version = "0.7.5", features = ["with-chrono-0_4"] }
 
 [profile.release]

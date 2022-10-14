@@ -24,6 +24,7 @@ mod utils;
 
 use std::env;
 use std::io::Result as IOResult;
+use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration as TimeDuration;
 
@@ -118,6 +119,14 @@ async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
     Ok(ServiceResponse::new(http_req, Viewer::serve_404(None)))
 }
 
+/// Serve CSS after minification
+#[get("/{path}.css")]
+async fn minify_css(path: web::Path<String>) -> impl Responder {
+    let stem = path.into_inner();
+    let css_path = Path::new(STATIC_DIR).join(stem + ".css");
+    Viewer::serve_css(&css_path).await
+}
+
 #[actix_web::main]
 async fn main() -> IOResult<()> {
     pretty_env_logger::init();
@@ -149,6 +158,7 @@ async fn main() -> IOResult<()> {
             .service(latest_comic)
             .service(comic_page)
             .service(random_comic)
+            .service(minify_css)
             // This should be at the end, otherwise everything after this will be ignored.
             .service(static_service)
     });
