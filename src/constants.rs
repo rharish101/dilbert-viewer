@@ -58,3 +58,5 @@ pub const REPO: &str = "https://github.com/rharish101/dilbert-viewer";
 /// URL path for static files
 // This is set to root as it's easy to serve robots.txt by keeping it in static.
 pub const STATIC_URL: &str = "/";
+/// Location of static files
+pub const STATIC_DIR: &str = "static/";

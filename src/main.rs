@@ -43,7 +43,7 @@ use rand::{thread_rng, Rng};
 use tokio_postgres::config::{Config as PgConfig, SslMode};
 
 use crate::app::Viewer;
-use crate::constants::{DATE_FMT, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, STATIC_URL};
+use crate::constants::{DATE_FMT, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, STATIC_DIR, STATIC_URL};
 use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
 
@@ -141,7 +141,7 @@ async fn main() -> IOResult<()> {
         // Create all worker-specific (i.e. thread-unsafe) structs here
         let viewer = Viewer::new(db_pool.clone()).unwrap();
         let static_service =
-            Files::new(STATIC_URL, String::from("static")).default_handler(invalid_url);
+            Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
 
         App::new()
             .app_data(web::Data::new(viewer))
