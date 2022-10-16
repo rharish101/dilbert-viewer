@@ -36,7 +36,7 @@ along with dilbert-viewer.  If not, see <https://www.gnu.org/licenses/>.
   <h2 class="h6 m-1">{{ data.title }}</h2>
 
   <!-- Comic image -->
-  <img class="img-fluid my-3 px-2" alt="Comic for {{ date }}" src="{{ data.img_url }}" />
+  <img class="img-fluid my-3 px-2" alt="Comic for {{ date }}" src="{{ data.img_url }}" width="{{ data.img_width }}" height="{{ data.img_height }}"/>
 
   <!-- Navigation buttons -->
   <div class="d-flex flex-row flex-nowrap btn-toolbar m-2" role="toolbar" aria-label="Navigation buttons">

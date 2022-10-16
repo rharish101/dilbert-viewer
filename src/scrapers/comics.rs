@@ -40,9 +40,10 @@ const CLEAN_CACHE_STMT: &str = "
     DELETE FROM comic_cache
     WHERE ctid in
     (SELECT ctid FROM comic_cache ORDER BY last_used LIMIT $1);";
-const FETCH_COMIC_STMT: &str = "SELECT img_url, title FROM comic_cache WHERE comic = $1;";
+const FETCH_COMIC_STMT: &str =
+    "SELECT img_url, title, img_width, img_height FROM comic_cache WHERE comic = $1;";
 const INSERT_COMIC_STMT: &str =
-    "INSERT INTO comic_cache (comic, img_url, title) VALUES ($1, $2, $3);";
+    "INSERT INTO comic_cache (comic, img_url, title, img_width, img_height) VALUES ($1, $2, $3, $4, $5);";
 
 pub struct ComicData {
     /// The title of the comic
@@ -57,6 +58,12 @@ pub struct ComicData {
 
     /// The URL to the comic image
     pub img_url: String,
+
+    /// The width of the image
+    pub img_width: i32,
+
+    /// The height of the image
+    pub img_height: i32,
 }
 
 /// Struct for a comic scraper
@@ -70,7 +77,7 @@ pub struct ComicScraper {
     // All regexes for scraping
     title_regex: Regex,
     date_str_regex: Regex,
-    img_url_regex: Regex,
+    img_regex: Regex,
 }
 
 fn regex_to_app_error(err: RegexError, msg: &str) -> AppError {
@@ -86,14 +93,14 @@ impl ComicScraper {
             "<date class=\"comic-title-date\" item[pP]rop=\"datePublished\">[^<]*<span>([^<]+)</span>[^<]*<span item[pP]rop=\"copyrightYear\">([^<]+)</span>",
         ).map_err(
             |err| regex_to_app_error(err, "Invalid regex for comic date string"))?;
-        let img_url_regex = Regex::new("<img[^>]*class=\"img-[^>]*src=\"([^\"]+)\"[^>]*>")
+        let img_regex = Regex::new("<img[^>]*class=\"img-[^>]*width=\"([0-9]+)\"[^>]*height=\"([0-9]+)\"[^>]*src=\"([^\"]+)\"[^>]*>")
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic image URL"))?;
 
         Ok(Self {
             insert_comic_lock,
             title_regex,
             date_str_regex,
-            img_url_regex,
+            img_regex,
         })
     }
 
@@ -202,6 +209,8 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             title: comic_row.try_get(1)?,
             date_str: date.format(ALT_DATE_FMT).to_string(),
             img_url: comic_row.try_get(0)?,
+            img_width: comic_row.try_get(2)?,
+            img_height: comic_row.try_get(3)?,
         };
 
         // Update `last_used`, so that this comic isn't accidently de-cached. We want to keep the
@@ -248,7 +257,13 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         if let Err(err) = db_client
             .execute(
                 INSERT_COMIC_STMT,
-                &[&date, &comic_data.img_url, &comic_data.title],
+                &[
+                    &date,
+                    &comic_data.img_url,
+                    &comic_data.title,
+                    &comic_data.img_width,
+                    &comic_data.img_height,
+                ],
             )
             .await
         {
@@ -313,11 +328,33 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             )));
         };
 
-        let img_url = if let Some(mat) = self
-            .img_url_regex
-            .captures(content)
-            .and_then(|captures| captures.get(1))
-        {
+        let img_info = if let Some(captures) = self.img_regex.captures(content) {
+            captures
+        } else {
+            return Err(AppError::Scrape(String::from(
+                "Error in scraping the image's details",
+            )));
+        };
+
+        let img_width =
+            if let Some(width) = img_info.get(1).and_then(|mat| mat.as_str().parse().ok()) {
+                width
+            } else {
+                return Err(AppError::Scrape(String::from(
+                    "Error in scraping the image's width",
+                )));
+            };
+
+        let img_height =
+            if let Some(height) = img_info.get(2).and_then(|mat| mat.as_str().parse().ok()) {
+                height
+            } else {
+                return Err(AppError::Scrape(String::from(
+                    "Error in scraping the image's height",
+                )));
+            };
+
+        let img_url = if let Some(mat) = img_info.get(3) {
             String::from(mat.as_str())
         } else {
             return Err(AppError::Scrape(String::from(
@@ -329,6 +366,8 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             title,
             date_str,
             img_url,
+            img_width,
+            img_height,
         })
     }
 }

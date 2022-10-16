@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS comic_cache (
 	comic DATE NOT NULL, -- date of the comic
 	img_url VARCHAR(255) NOT NULL, -- the comic image's URL
 	title VARCHAR(255) NOT NULL, -- the title of the comic, if it exists (some comics don't have it)
+	img_width INT NOT NULL, -- the comic image's width
+	img_height INT NOT NULL, -- the comic image's height
 	last_used TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- used for keeping only the most recent entries
 	PRIMARY KEY (comic)
 );
