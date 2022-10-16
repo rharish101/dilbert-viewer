@@ -98,7 +98,8 @@ async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(u16, u16, u16)>)
 /// Serve a random comic.
 #[get("/random")]
 async fn random_comic() -> impl Responder {
-    let first = str_to_date(FIRST_COMIC, DATE_FMT).unwrap();
+    let first = str_to_date(FIRST_COMIC, DATE_FMT)
+        .expect("Variable FIRST_COMIC not in format of variable DATE_FMT");
     // There might not be any comic for this date yet, so exclude the latest date.
     let latest = curr_date() - DateDuration::days(1);
 
@@ -154,7 +155,8 @@ async fn main() -> IOResult<()> {
 
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here
-        let viewer = Viewer::new(db_pool.clone(), insert_comic_lock.clone()).unwrap();
+        let viewer = Viewer::new(db_pool.clone(), insert_comic_lock.clone())
+            .expect("Unable to initialise the app");
         let static_service =
             Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
 
