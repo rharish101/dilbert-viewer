@@ -29,8 +29,8 @@ pub const ALT_DATE_FMT: &str = "%A %B %d, %Y";
 // ==================================================
 // Parameters for scraping from "dilbert.com"
 // ==================================================
-/// Timeout (in seconds) for establishing a connection
-pub const FETCH_TIMEOUT: u64 = 3;
+/// Timeout (in seconds) for getting a response
+pub const RESP_TIMEOUT: u64 = 5;
 
 // ==================================================
 // Parameters for caching to the database

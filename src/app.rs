@@ -27,7 +27,7 @@ use deadpool_postgres::Pool;
 use log::{debug, info};
 use tokio::sync::Mutex;
 
-use crate::constants::{ALT_DATE_FMT, DATE_FMT, FETCH_TIMEOUT, FIRST_COMIC, REPO, SRC_PREFIX};
+use crate::constants::{ALT_DATE_FMT, DATE_FMT, FIRST_COMIC, REPO, RESP_TIMEOUT, SRC_PREFIX};
 use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
@@ -47,7 +47,7 @@ pub struct Viewer {
 
 /// Initialize the client session for scraping comics.
 fn get_http_client() -> HttpClient {
-    let timeout = TimeDuration::from_secs(FETCH_TIMEOUT);
+    let timeout = TimeDuration::from_secs(RESP_TIMEOUT);
     HttpClient::builder().timeout(timeout).finish()
 }
 
