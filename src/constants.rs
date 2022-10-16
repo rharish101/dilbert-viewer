@@ -52,6 +52,9 @@ pub const LATEST_DATE_REFRESH: f64 = 2.0;
 // ==================================================
 /// URL prefix for each comic on "dilbert.com"
 pub const SRC_PREFIX: &str = "https://dilbert.com/strip/";
+/// Default port when one isn't specified
+// This is Heroku's default port when running locally
+pub const PORT: &str = "5000";
 /// Link to the public version of this repo
 // Mainly for publicity :P
 pub const REPO: &str = "https://github.com/rharish101/dilbert-viewer";

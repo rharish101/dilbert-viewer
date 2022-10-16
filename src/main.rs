@@ -44,7 +44,9 @@ use rand::{thread_rng, Rng};
 use tokio_postgres::config::{Config as PgConfig, SslMode};
 
 use crate::app::Viewer;
-use crate::constants::{DATE_FMT, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, STATIC_DIR, STATIC_URL};
+use crate::constants::{
+    DATE_FMT, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, STATIC_DIR, STATIC_URL,
+};
 use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
 
@@ -131,7 +133,10 @@ async fn minify_css(path: web::Path<String>) -> impl Responder {
 async fn main() -> IOResult<()> {
     pretty_env_logger::init();
 
-    let host = format!("0.0.0.0:{}", env::var("PORT").unwrap());
+    let host = format!(
+        "0.0.0.0:{}",
+        env::var("PORT").unwrap_or_else(|_| String::from(PORT))
+    );
     info!("Starting server at {}", host);
 
     // Create all worker-shared (i.e. thread-safe) structs here
