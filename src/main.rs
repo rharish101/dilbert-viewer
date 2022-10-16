@@ -167,8 +167,9 @@ async fn main() -> IOResult<()> {
     // Currently the Rust buildpack for Heroku doesn't support WEB_CONCURRENCY, so only use it if
     // present.
     if let Ok(web_concurrency) = env::var("WEB_CONCURRENCY") {
-        let num_workers = usize::from_str(web_concurrency.as_str()).unwrap();
-        server = server.workers(num_workers);
+        if let Ok(num_workers) = usize::from_str(web_concurrency.as_str()) {
+            server = server.workers(num_workers);
+        }
     }
 
     server.bind(host)?.run().await
