@@ -24,7 +24,7 @@ use askama::Template;
 use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
 use deadpool_postgres::Pool;
-use log::{debug, info};
+use log::{debug, error, info};
 use tokio::sync::Mutex;
 
 use crate::constants::{ALT_DATE_FMT, DATE_FMT, FIRST_COMIC, REPO, RESP_TIMEOUT, SRC_PREFIX};
@@ -257,14 +257,22 @@ impl Viewer {
     /// * `err` - The actual internal server error
     pub fn serve_500(err: &AppError) -> HttpResponse {
         let error = &format!("{}", err);
-        let webpage = ErrorTemplate { error, repo: REPO }.render().unwrap();
-        let minified = if let Ok(html) = Self::minify_html(webpage.clone()) {
-            html
-        } else {
-            webpage
-        };
-        HttpResponse::InternalServerError()
-            .content_type(ContentType::html())
-            .body(minified)
+        let mut response = HttpResponse::InternalServerError();
+
+        let error_template = ErrorTemplate { error, repo: REPO };
+        match error_template.render() {
+            Ok(webpage) => {
+                let minified = if let Ok(html) = Self::minify_html(webpage.clone()) {
+                    html
+                } else {
+                    webpage
+                };
+                response.content_type(ContentType::html()).body(minified)
+            }
+            Err(err) => {
+                error!("Couldn't render Error 500 HTML: {}", err);
+                response.finish()
+            }
+        }
     }
 }
