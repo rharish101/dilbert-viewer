@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with dilbert-viewer.  If not, see <https://www.gnu.org/licenses/>.
 use std::cmp::{max, min};
+use std::sync::Arc;
 use std::time::Duration as TimeDuration;
 
 use actix_web::{http::header::ContentType, HttpResponse};
@@ -24,6 +25,7 @@ use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
 use deadpool_postgres::Pool;
 use log::{debug, info};
+use tokio::sync::Mutex;
 
 use crate::constants::{ALT_DATE_FMT, DATE_FMT, FETCH_TIMEOUT, FIRST_COMIC, REPO, SRC_PREFIX};
 use crate::errors::{AppError, AppResult, MinificationError};
@@ -51,11 +53,11 @@ fn get_http_client() -> HttpClient {
 
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db_pool: Option<Pool>) -> AppResult<Self> {
+    pub fn new(db_pool: Option<Pool>, insert_comic_lock: Arc<Mutex<()>>) -> AppResult<Self> {
         Ok(Self {
             db_pool,
             http_client: get_http_client(),
-            comic_scraper: ComicScraper::new()?,
+            comic_scraper: ComicScraper::new(insert_comic_lock)?,
             latest_date_scraper: LatestDateScraper::new(),
         })
     }

@@ -15,6 +15,8 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with dilbert-viewer.  If not, see <https://www.gnu.org/licenses/>.
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use awc::{http::StatusCode, Client as HttpClient};
 use chrono::NaiveDate;
@@ -62,7 +64,8 @@ pub struct ComicData {
 /// This scraper takes a date (in the format used by "dilbert.com") as input.
 /// It returns the info about the comic.
 pub struct ComicScraper {
-    insert_comic_lock: Mutex<()>,
+    // We want to guard a section of code, not an item, so use `()`.
+    insert_comic_lock: Arc<Mutex<()>>,
 
     // All regexes for scraping
     title_regex: Regex,
@@ -76,7 +79,7 @@ fn regex_to_app_error(err: RegexError, msg: &str) -> AppError {
 
 impl ComicScraper {
     /// Initialize a comics scraper.
-    pub fn new() -> AppResult<Self> {
+    pub fn new(insert_comic_lock: Arc<Mutex<()>>) -> AppResult<Self> {
         let title_regex = Regex::new("<span class=\"comic-title-name\">([^<]+)</span>")
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic title"))?;
         let date_str_regex = Regex::new(
@@ -87,8 +90,7 @@ impl ComicScraper {
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic image URL"))?;
 
         Ok(Self {
-            // We want to guard a section of code, not an item, so use `()`.
-            insert_comic_lock: Mutex::new(()),
+            insert_comic_lock,
             title_regex,
             date_str_regex,
             img_url_regex,

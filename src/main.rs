@@ -145,10 +145,11 @@ async fn main() -> IOResult<()> {
             None
         }
     };
+    let insert_comic_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
 
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here
-        let viewer = Viewer::new(db_pool.clone()).unwrap();
+        let viewer = Viewer::new(db_pool.clone(), insert_comic_lock.clone()).unwrap();
         let static_service =
             Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
 
