@@ -23,10 +23,9 @@ use chrono::NaiveDate;
 use deadpool_postgres::Pool;
 use html_escape::decode_html_entities;
 use itertools::Itertools;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use regex::{Error as RegexError, Match, Regex};
 use tokio::sync::Mutex;
-use tokio_postgres::error::SqlState;
 
 use crate::constants::{ALT_DATE_FMT, CACHE_LIMIT, DATE_FMT, SRC_PREFIX};
 use crate::errors::{AppError, AppResult};
@@ -42,8 +41,11 @@ const CLEAN_CACHE_STMT: &str = "
     (SELECT ctid FROM comic_cache ORDER BY last_used LIMIT $1);";
 const FETCH_COMIC_STMT: &str =
     "SELECT img_url, title, img_width, img_height FROM comic_cache WHERE comic = $1;";
-const INSERT_COMIC_STMT: &str =
-    "INSERT INTO comic_cache (comic, img_url, title, img_width, img_height) VALUES ($1, $2, $3, $4, $5);";
+const INSERT_COMIC_STMT: &str = "
+    INSERT INTO comic_cache (comic, img_url, title, img_width, img_height)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (comic) DO UPDATE
+        SET last_used = DEFAULT;";
 
 pub struct ComicData {
     /// The title of the comic
@@ -245,7 +247,8 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         //   3. Coroutine 1 adds its row
         //   4. Coroutine 2 adds its row
         debug!("Setting the comic insertion lock");
-        let lock_guard = self.insert_comic_lock.lock().await;
+        // This needs to assigned to a variable, otherwise the mutex will immediately unlock
+        let _lock_guard = self.insert_comic_lock.lock().await;
         debug!("Got the comic insertion lock");
 
         if let Err(err) = Self::clean_cache(db_pool).await {
@@ -267,26 +270,10 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             )
             .await
         {
-            if err.code() == Some(&SqlState::UNIQUE_VIOLATION) {
-                // This comic date exists, so some other coroutine has already cached this date in
-                // parallel. So we can simply update `last_used` later (outside the lock).
-                warn!("Trying to cache date {}, which is already cached.", date);
-            } else {
-                return Err(AppError::from(err));
-            }
+            return Err(AppError::from(err));
         } else {
             return Ok(());
         }
-
-        // Release the lock, as it's no longer needed.
-        debug!("Releasing the comic insertion lock");
-        drop(lock_guard);
-
-        // This only executes if caching data led to a UniqueViolation error. The lock isn't needed
-        // here, as this command cannot increase the no. of rows in the cache.
-        info!("Now trying to update `last_used` in cache.");
-        db_client.execute(UPDATE_LAST_USED_STMT, &[&date]).await?;
-        Ok(())
     }
 
     /// Scrape the comic data of the requested date from the source.
