@@ -48,7 +48,10 @@ pub struct Viewer {
 /// Initialize the client session for scraping comics.
 fn get_http_client() -> HttpClient {
     let timeout = TimeDuration::from_secs(RESP_TIMEOUT);
-    HttpClient::builder().timeout(timeout).finish()
+    HttpClient::builder()
+        .disable_redirects()
+        .timeout(timeout)
+        .finish()
 }
 
 impl Viewer {
