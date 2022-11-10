@@ -19,7 +19,7 @@ use std::cmp::Ordering;
 
 use async_trait::async_trait;
 use awc::{http::StatusCode, Client as HttpClient};
-use chrono::Duration;
+use chrono::{Duration, NaiveDate};
 use deadpool_postgres::Pool;
 use log::{info, warn};
 use tokio_postgres::types::ToSql;
@@ -95,7 +95,12 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         if rows.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(rows[0].try_get(0)?))
+            Ok(Some(
+                rows[0]
+                    .try_get::<usize, NaiveDate>(0)?
+                    .format(DATE_FMT)
+                    .to_string(),
+            ))
         }
     }
 
