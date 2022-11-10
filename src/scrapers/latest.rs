@@ -35,7 +35,7 @@ const LATEST_DATE_STMT: &str = "
     WHERE last_check >= CURRENT_TIMESTAMP - INTERVAL '1 hour' * $1;";
 const INSERT_DATE_STMT: &str = "INSERT INTO latest_date (latest) VALUES ($1);";
 // The WHERE condition is not required as there is always only one row in the `latest_date` table.
-const UPDATE_DATE_STMT: &str = "UPDATE latest_date SET latest = $1;";
+const UPDATE_DATE_STMT: &str = "UPDATE latest_date SET latest = $1, last_check = DEFAULT;";
 
 /// Struct to scrape the date of the latest Dilbert comic.
 ///
