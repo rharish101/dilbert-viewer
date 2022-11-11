@@ -13,7 +13,7 @@ actix-files = "0.6.0"
 actix-web = "4.0.1"
 askama = "0.11.0"
 async-trait = "0.1.52"
-awc = { version = "3.0.1", features = ["openssl"] }
+awc = { version = "3.0.1", features = ["rustls"] }
 chrono = "0.4.19"
 futures = "0.3.19"
 html-escape = "0.2.9"
@@ -22,8 +22,8 @@ minifier = "0.2.2"
 minify-html = { version = "0.10.2", package = "minify-html-onepass" }
 pretty_env_logger = "0.4.0"
 rand = "0.8.4"
-sea-orm = { version = "0.10.0", features = ["macros", "sqlx-postgres", "runtime-tokio-native-tls"] }
-sqlx = { version = "0.6.2", features = ["postgres", "runtime-tokio-native-tls"] }
+sea-orm = { version = "0.10.0", features = ["macros", "sqlx-postgres", "runtime-tokio-rustls"] }
+sqlx = { version = "0.6.2", features = ["postgres", "runtime-tokio-rustls"] }
 thiserror = "1.0.34"
 tl = "0.7.7"
 tokio = { version = "1.15.0", features = ["fs", "sync"] }
