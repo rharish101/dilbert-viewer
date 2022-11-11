@@ -27,7 +27,7 @@ use deadpool_postgres::Pool;
 use log::{debug, error, info};
 use tokio::sync::Mutex;
 
-use crate::constants::{ALT_DATE_FMT, DATE_FMT, FIRST_COMIC, REPO, RESP_TIMEOUT, SRC_PREFIX};
+use crate::constants::{DISP_DATE_FMT, FIRST_COMIC, REPO, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX};
 use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
@@ -90,14 +90,14 @@ impl Viewer {
         comic_data: &ComicData,
         latest_comic: NaiveDate,
     ) -> AppResult<HttpResponse> {
-        let first_comic = str_to_date(FIRST_COMIC, DATE_FMT)?;
+        let first_comic = str_to_date(FIRST_COMIC, SRC_DATE_FMT)?;
 
         // Links to previous and next comics
         let previous_comic = &max(first_comic, date - DateDuration::days(1))
-            .format(DATE_FMT)
+            .format(SRC_DATE_FMT)
             .to_string();
         let next_comic = &min(latest_comic, date + DateDuration::days(1))
-            .format(DATE_FMT)
+            .format(SRC_DATE_FMT)
             .to_string();
 
         // Whether to disable left/right navigation buttons
@@ -105,12 +105,13 @@ impl Viewer {
         let disable_right_nav = date == latest_comic;
 
         // Link to original strip on "dilbert.com"
-        let permalink = &format!("{}{}", SRC_PREFIX, date.format(DATE_FMT));
+        let permalink = &format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT));
 
         let webpage = ComicTemplate {
             data: comic_data,
-            date: &date.format(DATE_FMT).to_string(),
-            first_comic: &first_comic.format(DATE_FMT).to_string(),
+            date_disp: &comic_data.date.format(DISP_DATE_FMT).to_string(),
+            date: &date.format(SRC_DATE_FMT).to_string(),
+            first_comic: &first_comic.format(SRC_DATE_FMT).to_string(),
             previous_comic,
             next_comic,
             disable_left_nav,
@@ -163,21 +164,20 @@ impl Viewer {
             }
         };
 
-        let date = &comic_data.date_str;
-        let mut latest_comic_obj = str_to_date(latest_comic, DATE_FMT)?;
-        let date_obj = str_to_date(date, ALT_DATE_FMT)?;
+        let date = comic_data.date;
+        let mut latest_comic_date = str_to_date(latest_comic, SRC_DATE_FMT)?;
 
         // The date of the latest comic is often retrieved from the cache. If there is a comic for
         // a date which is newer than the cached value, then there is a new "latest comic".
-        if latest_comic_obj < date_obj {
-            latest_comic_obj = date_obj;
+        if latest_comic_date < date {
+            latest_comic_date = date;
             // Cache the new value of the latest comic date
             self.latest_date_scraper
-                .update_latest_date(&self.db_pool, date)
+                .update_latest_date(&self.db_pool, &date.format(SRC_DATE_FMT).to_string())
                 .await?;
         };
 
-        Self::serve_template(date_obj, &comic_data, latest_comic_obj)
+        Self::serve_template(date, &comic_data, latest_comic_date)
     }
 
     /// Serve the requested comic.

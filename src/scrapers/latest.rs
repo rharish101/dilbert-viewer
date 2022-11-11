@@ -24,7 +24,7 @@ use deadpool_postgres::Pool;
 use log::{info, warn};
 use tokio_postgres::types::ToSql;
 
-use crate::constants::{DATE_FMT, LATEST_DATE_REFRESH, SRC_PREFIX};
+use crate::constants::{LATEST_DATE_REFRESH, SRC_DATE_FMT, SRC_PREFIX};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::{curr_date, str_to_date};
@@ -98,7 +98,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
             Ok(Some(
                 rows[0]
                     .try_get::<usize, NaiveDate>(0)?
-                    .format(DATE_FMT)
+                    .format(SRC_DATE_FMT)
                     .to_string(),
             ))
         }
@@ -116,7 +116,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         } else {
             return Ok(());
         };
-        let query_params: [&(dyn ToSql + Sync); 1] = [&str_to_date(date, DATE_FMT)?];
+        let query_params: [&(dyn ToSql + Sync); 1] = [&str_to_date(date, SRC_DATE_FMT)?];
         let rows_updated = db_client
             .execute(UPDATE_DATE_STMT, query_params.as_slice())
             .await?;
@@ -148,7 +148,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
     async fn scrape_data(&self, http_client: &HttpClient, _reference: &()) -> AppResult<String> {
         // If there is no comic for this date yet, "dilbert.com" will auto-redirect to the
         // homepage.
-        let latest = curr_date().format(DATE_FMT).to_string();
+        let latest = curr_date().format(SRC_DATE_FMT).to_string();
         let url = String::from(SRC_PREFIX) + &latest;
 
         info!("Trying date \"{}\" for latest comic", latest);
@@ -158,7 +158,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
             // Redirected to homepage, implying that there's no comic for this date. There must
             // be a comic for the previous date, so use that.
             let date = (curr_date() - Duration::days(1))
-                .format(DATE_FMT)
+                .format(SRC_DATE_FMT)
                 .to_string();
             info!(
                 "No comic found for today ({}); using date: {}",

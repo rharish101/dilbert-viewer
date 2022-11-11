@@ -45,7 +45,7 @@ use tokio_postgres::config::{Config as PgConfig, SslMode};
 
 use crate::app::Viewer;
 use crate::constants::{
-    DATE_FMT, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, STATIC_DIR, STATIC_URL,
+    DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, SRC_DATE_FMT, STATIC_DIR, STATIC_URL,
 };
 use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
@@ -72,7 +72,7 @@ fn get_db_pool() -> Result<Pool, DbInitError> {
 async fn latest_comic(viewer: web::Data<Viewer>) -> impl Responder {
     // If there is no comic for this date yet, "dilbert.com" will redirect to the homepage. The
     // code can handle this by instead showing the contents of the latest comic.
-    let today = curr_date().format(DATE_FMT).to_string();
+    let today = curr_date().format(SRC_DATE_FMT).to_string();
 
     // If there is no comic for this date yet, we don't want to raise a 404, so just show the exact
     // latest date without a redirection (to preserve the URL and load faster).
@@ -88,7 +88,7 @@ async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(u16, u16, u16)>)
     let date = format!("{:04}-{:02}-{:02}", year, month, day);
 
     // Check to see if the date is invalid.
-    if str_to_date(&date, DATE_FMT).is_err() {
+    if str_to_date(&date, SRC_DATE_FMT).is_err() {
         Viewer::serve_404(None)
     } else {
         viewer.serve_comic(&date, false).await
@@ -98,7 +98,7 @@ async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(u16, u16, u16)>)
 /// Serve a random comic.
 #[get("/random")]
 async fn random_comic() -> impl Responder {
-    let first = str_to_date(FIRST_COMIC, DATE_FMT)
+    let first = str_to_date(FIRST_COMIC, SRC_DATE_FMT)
         .expect("Variable FIRST_COMIC not in format of variable DATE_FMT");
     // There might not be any comic for this date yet, so exclude the latest date.
     let latest = curr_date() - DateDuration::days(1);
@@ -108,7 +108,7 @@ async fn random_comic() -> impl Responder {
     let rand_offset = rng.gen_range(0..(latest - first).num_days());
     let rand_date = first + DateDuration::days(rand_offset);
 
-    let location = format!("/{}", rand_date.format(DATE_FMT));
+    let location = format!("/{}", rand_date.format(SRC_DATE_FMT));
     HttpResponse::TemporaryRedirect()
         .append_header(("Location", location))
         .finish()

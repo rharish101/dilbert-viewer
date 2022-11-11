@@ -22,9 +22,9 @@
 /// Date of the first ever Dilbert comic
 pub const FIRST_COMIC: &str = "1989-04-16";
 /// Date format used for URLs on "dilbert.com"
-pub const DATE_FMT: &str = "%Y-%m-%d";
+pub const SRC_DATE_FMT: &str = "%Y-%m-%d";
 /// Date format used for display with the comic on "dilbert.com"
-pub const ALT_DATE_FMT: &str = "%A %B %d, %Y";
+pub const DISP_DATE_FMT: &str = "%A %B %d, %Y";
 
 // ==================================================
 // Parameters for scraping from "dilbert.com"

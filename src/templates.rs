@@ -25,8 +25,10 @@ use crate::scrapers::ComicData;
 pub struct ComicTemplate<'a> {
     /// The scraped comic data
     pub data: &'a ComicData,
+    /// The date of the comic, formatted for display
+    pub date_disp: &'a str,
 
-    // All date formats should conform to the format given by `crate::constants::DATE_FMT`.
+    // All date formats should conform to the format given by `crate::constants::SRC_DATE_FMT`.
     /// The date of the comic
     pub date: &'a str,
     /// The date of the first comic

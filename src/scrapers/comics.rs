@@ -22,12 +22,11 @@ use awc::{http::StatusCode, Client as HttpClient};
 use chrono::NaiveDate;
 use deadpool_postgres::Pool;
 use html_escape::decode_html_entities;
-use itertools::Itertools;
 use log::{debug, error, info};
-use regex::{Error as RegexError, Match, Regex};
+use regex::{Error as RegexError, Regex};
 use tokio::sync::Mutex;
 
-use crate::constants::{ALT_DATE_FMT, CACHE_LIMIT, DATE_FMT, SRC_PREFIX};
+use crate::constants::{CACHE_LIMIT, SRC_DATE_FMT, SRC_PREFIX};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::str_to_date;
@@ -48,18 +47,14 @@ const INSERT_COMIC_STMT: &str = "
         SET last_used = DEFAULT;";
 
 pub struct ComicData {
-    /// The title of the comic
-    pub title: String,
-
-    /// The date of that comic as displayed on "dilbert.com"
-    // NOTE: The value for the key "dateStr" represents the date in a format which is different
-    // from the format used to fetch comics. Also, this date can be different from the given date,
-    // as "dilbert.com" can redirect to a different date. This redirection only happens if the
-    // input date in invalid.
-    pub date_str: String,
+    /// The date of the comic
+    pub date: NaiveDate,
 
     /// The URL to the comic image
     pub img_url: String,
+
+    /// The title of the comic
+    pub title: String,
 
     /// The width of the image
     pub img_width: i32,
@@ -78,7 +73,6 @@ pub struct ComicScraper {
 
     // All regexes for scraping
     title_regex: Regex,
-    date_str_regex: Regex,
     img_regex: Regex,
 }
 
@@ -91,17 +85,12 @@ impl ComicScraper {
     pub fn new(insert_comic_lock: Arc<Mutex<()>>) -> AppResult<Self> {
         let title_regex = Regex::new("<span class=\"comic-title-name\">([^<]+)</span>")
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic title"))?;
-        let date_str_regex = Regex::new(
-            "<date class=\"comic-title-date\" item[pP]rop=\"datePublished\">[^<]*<span>([^<]+)</span>[^<]*<span item[pP]rop=\"copyrightYear\">([^<]+)</span>",
-        ).map_err(
-            |err| regex_to_app_error(err, "Invalid regex for comic date string"))?;
         let img_regex = Regex::new("<img[^>]*class=\"img-[^>]*width=\"([0-9]+)\"[^>]*height=\"([0-9]+)\"[^>]*src=\"([^\"]+)\"[^>]*>")
             .map_err(|err| regex_to_app_error(err, "Invalid regex for comic image URL"))?;
 
         Ok(Self {
             insert_comic_lock,
             title_regex,
-            date_str_regex,
             img_regex,
         })
     }
@@ -184,7 +173,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         db_pool: &Option<Pool>,
         date: &str,
     ) -> AppResult<Option<ComicData>> {
-        let date = str_to_date(date, DATE_FMT)?;
+        let date = str_to_date(date, SRC_DATE_FMT)?;
         // The other columns in the table are: `comic`, `last_used`. `comic` is not required here,
         // as we already have the date as a function argument. In case the date given here is
         // invalid (i.e. it would redirect to a comic with a different date), we cannot retrieve
@@ -208,9 +197,9 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
 
         let comic_row = &rows[0];
         let comic_data = ComicData {
-            title: comic_row.try_get(1)?,
-            date_str: date.format(ALT_DATE_FMT).to_string(),
+            date,
             img_url: comic_row.try_get(0)?,
+            title: comic_row.try_get(1)?,
             img_width: comic_row.try_get(2)?,
             img_height: comic_row.try_get(3)?,
         };
@@ -235,10 +224,6 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             return Ok(());
         };
 
-        // The given date can be invalid (i.e. we may have been redirected to a comic with a
-        // different date), hence get the correct date from the scraped data.
-        let date = str_to_date(&comic_data.date_str, ALT_DATE_FMT)?;
-
         // This lock ensures that the no. of rows in the cache doesn't increase. This can happen,
         // as the code involves first clearing excess rows, then adding a new row. Therefore, the
         // following can increase the no. of rows:
@@ -261,7 +246,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             .execute(
                 INSERT_COMIC_STMT,
                 &[
-                    &date,
+                    &comic_data.date,
                     &comic_data.img_url,
                     &comic_data.title,
                     &comic_data.img_width,
@@ -299,18 +284,6 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             String::new()
         };
 
-        let date_str = if let Some(captures) = self
-            .date_str_regex
-            .captures(content)
-            .and_then(|captures| -> Option<Vec<Match>> { captures.iter().collect() })
-        {
-            captures[1..].iter().map(Match::as_str).join(" ")
-        } else {
-            return Err(AppError::Scrape(String::from(
-                "Error in scraping the date string",
-            )));
-        };
-
         let img_info = if let Some(captures) = self.img_regex.captures(content) {
             captures
         } else {
@@ -346,9 +319,9 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         };
 
         Ok(ComicData {
-            title,
-            date_str,
+            date: str_to_date(date, SRC_DATE_FMT)?,
             img_url,
+            title,
             img_width,
             img_height,
         })
