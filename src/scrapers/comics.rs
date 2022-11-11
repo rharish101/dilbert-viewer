@@ -257,7 +257,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             error!("Failed to clean comics cache: {:#?}", err);
         }
 
-        if let Err(err) = db_client
+        db_client
             .execute(
                 INSERT_COMIC_STMT,
                 &[
@@ -268,12 +268,8 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
                     &comic_data.img_height,
                 ],
             )
-            .await
-        {
-            return Err(AppError::from(err));
-        } else {
-            return Ok(());
-        }
+            .await?;
+        Ok(())
     }
 
     /// Scrape the comic data of the requested date from the source.
@@ -300,7 +296,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             decode_html_entities(mat.as_str()).into_owned()
         } else {
             // Some comics don't have a title. This is mostly for older comics.
-            String::from("")
+            String::new()
         };
 
         let date_str = if let Some(captures) = self
