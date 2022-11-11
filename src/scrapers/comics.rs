@@ -23,7 +23,7 @@ use chrono::NaiveDate;
 use deadpool_postgres::Pool;
 use html_escape::decode_html_entities;
 use log::{debug, error, info};
-use regex::{Error as RegexError, Regex};
+use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 use tokio::sync::Mutex;
 
 use crate::constants::{CACHE_LIMIT, SRC_DATE_FMT, SRC_PREFIX};
@@ -70,29 +70,12 @@ pub struct ComicData {
 pub struct ComicScraper {
     // We want to guard a section of code, not an item, so use `()`.
     insert_comic_lock: Arc<Mutex<()>>,
-
-    // All regexes for scraping
-    title_regex: Regex,
-    img_regex: Regex,
-}
-
-fn regex_to_app_error(err: RegexError, msg: &str) -> AppError {
-    AppError::Regex(err, String::from(msg))
 }
 
 impl ComicScraper {
     /// Initialize a comics scraper.
-    pub fn new(insert_comic_lock: Arc<Mutex<()>>) -> AppResult<Self> {
-        let title_regex = Regex::new("<span class=\"comic-title-name\">([^<]+)</span>")
-            .map_err(|err| regex_to_app_error(err, "Invalid regex for comic title"))?;
-        let img_regex = Regex::new("<img[^>]*class=\"img-[^>]*width=\"([0-9]+)\"[^>]*height=\"([0-9]+)\"[^>]*src=\"([^\"]+)\"[^>]*>")
-            .map_err(|err| regex_to_app_error(err, "Invalid regex for comic image URL"))?;
-
-        Ok(Self {
-            insert_comic_lock,
-            title_regex,
-            img_regex,
-        })
+    pub fn new(insert_comic_lock: Arc<Mutex<()>>) -> Self {
+        Self { insert_comic_lock }
     }
 
     /// Update the last used date for the given comic.
@@ -273,45 +256,59 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             Err(_) => return Err(AppError::Scrape(String::from("Response is not UTF-8"))),
         };
 
-        let title = if let Some(mat) = self
-            .title_regex
-            .captures(content)
-            .and_then(|captures| captures.get(1))
-        {
-            decode_html_entities(mat.as_str()).into_owned()
+        let dom = parse_html(content, ParserOptions::default())?;
+        let parser = dom.parser();
+        let get_first_node_by_class = |class| {
+            dom.get_elements_by_class_name(class)
+                .next()
+                .and_then(|handle| handle.get(parser))
+        };
+
+        let title = if let Some(node) = get_first_node_by_class("comic-title-name") {
+            decode_html_entities(&node.inner_text(parser)).into_owned()
         } else {
             // Some comics don't have a title. This is mostly for older comics.
             String::new()
         };
 
-        let img_info = if let Some(captures) = self.img_regex.captures(content) {
-            captures
+        let img_attrs =
+            if let Some(tag) = get_first_node_by_class("img-comic").and_then(Node::as_tag) {
+                tag.attributes()
+            } else {
+                return Err(AppError::Scrape(String::from(
+                    "Error in scraping the image's details",
+                )));
+            };
+        let get_i32_img_attr = |attr| -> Option<i32> {
+            img_attrs
+                .get(attr)
+                .flatten()
+                .and_then(Bytes::try_as_utf8_str)
+                .and_then(|attr_str| attr_str.parse().ok())
+        };
+
+        let img_width = if let Some(width) = get_i32_img_attr("width") {
+            width
         } else {
             return Err(AppError::Scrape(String::from(
-                "Error in scraping the image's details",
+                "Error in scraping the image's width",
             )));
         };
 
-        let img_width =
-            if let Some(width) = img_info.get(1).and_then(|mat| mat.as_str().parse().ok()) {
-                width
-            } else {
-                return Err(AppError::Scrape(String::from(
-                    "Error in scraping the image's width",
-                )));
-            };
+        let img_height = if let Some(height) = get_i32_img_attr("height") {
+            height
+        } else {
+            return Err(AppError::Scrape(String::from(
+                "Error in scraping the image's height",
+            )));
+        };
 
-        let img_height =
-            if let Some(height) = img_info.get(2).and_then(|mat| mat.as_str().parse().ok()) {
-                height
-            } else {
-                return Err(AppError::Scrape(String::from(
-                    "Error in scraping the image's height",
-                )));
-            };
-
-        let img_url = if let Some(mat) = img_info.get(3) {
-            String::from(mat.as_str())
+        let img_url = if let Some(url) = img_attrs
+            .get("src")
+            .flatten()
+            .and_then(Bytes::try_as_utf8_str)
+        {
+            String::from(url)
         } else {
             return Err(AppError::Scrape(String::from(
                 "Error in scraping the image's URL",

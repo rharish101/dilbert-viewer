@@ -155,8 +155,7 @@ async fn main() -> IOResult<()> {
 
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here
-        let viewer = Viewer::new(db_pool.clone(), insert_comic_lock.clone())
-            .expect("Unable to initialise the app");
+        let viewer = Viewer::new(db_pool.clone(), insert_comic_lock.clone());
         let static_service =
             Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
 

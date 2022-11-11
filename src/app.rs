@@ -56,13 +56,13 @@ fn get_http_client() -> HttpClient {
 
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db_pool: Option<Pool>, insert_comic_lock: Arc<Mutex<()>>) -> AppResult<Self> {
-        Ok(Self {
+    pub fn new(db_pool: Option<Pool>, insert_comic_lock: Arc<Mutex<()>>) -> Self {
+        Self {
             db_pool,
             http_client: get_http_client(),
-            comic_scraper: ComicScraper::new(insert_comic_lock)?,
+            comic_scraper: ComicScraper::new(insert_comic_lock),
             latest_date_scraper: LatestDateScraper::new(),
-        })
+        }
     }
 
     fn minify_html(mut html: String) -> AppResult<String> {

@@ -81,9 +81,9 @@ pub enum AppError {
     /// Errors in parsing dates
     #[error("Error parsing date: {0}")]
     DateParse(#[from] chrono::format::ParseError),
-    /// Errors in regex pattern syntax, or when parsing strings using regex
-    #[error("Regex error: {0}")]
-    Regex(regex::Error, String),
+    /// Errors in HTML parsing
+    #[error("HTML parse error: {0}")]
+    HtmlParse(#[from] tl::errors::ParseError),
     /// Errors in building HTML templates
     #[error("Error building HTML template: {0}")]
     Template(#[from] askama::Error),
