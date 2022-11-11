@@ -37,15 +37,15 @@ pub const RESP_TIMEOUT: u64 = 5;
 // ==================================================
 /// Limit for connections to the cache database
 // Heroku's free tier limit is 20.
-pub const MAX_DB_CONN: usize = 19;
+pub const MAX_DB_CONN: u32 = 19;
 /// Timeout (in seconds) for a single database operation
 pub const DB_TIMEOUT: u64 = 3;
 /// Limit (in no. of comics) for the comics cache in the database
 // Heroku's free tier limit is 10,000 rows in a database with max. size 1GB. Note that apart from
 // this, we have the latest date table, which always has exactly one row.
-pub const CACHE_LIMIT: f32 = 9900.0;
+pub const CACHE_LIMIT: u64 = 9900;
 /// No. of hrs after scraping the latest date when it is to be scraped again
-pub const LATEST_DATE_REFRESH: f64 = 2.0;
+pub const LATEST_DATE_REFRESH: i64 = 2;
 
 // ==================================================
 // Miscellaneous

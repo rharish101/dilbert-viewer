@@ -15,20 +15,18 @@ askama = "0.11.0"
 async-trait = "0.1.52"
 awc = { version = "3.0.1", features = ["openssl"] }
 chrono = "0.4.19"
-deadpool-postgres = "0.10.1"
 futures = "0.3.19"
 html-escape = "0.2.9"
 log = "0.4.14"
 minifier = "0.2.2"
 minify-html = { version = "0.10.2", package = "minify-html-onepass" }
-native-tls = "0.2.8"
-postgres-native-tls = "0.5.0"
 pretty_env_logger = "0.4.0"
 rand = "0.8.4"
+sea-orm = { version = "0.10.0", features = ["macros", "sqlx-postgres", "runtime-tokio-native-tls"] }
+sqlx = { version = "0.6.2", features = ["postgres", "runtime-tokio-native-tls"] }
 thiserror = "1.0.34"
 tl = "0.7.7"
 tokio = { version = "1.15.0", features = ["fs", "sync"] }
-tokio-postgres = { version = "0.7.5", features = ["with-chrono-0_4"] }
 
 [profile.release]
 lto = true

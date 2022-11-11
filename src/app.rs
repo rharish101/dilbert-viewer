@@ -23,8 +23,8 @@ use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
 use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
-use deadpool_postgres::Pool;
 use log::{debug, error, info};
+use sea_orm::DatabaseConnection;
 use tokio::sync::Mutex;
 
 use crate::constants::{DISP_DATE_FMT, FIRST_COMIC, REPO, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX};
@@ -35,7 +35,7 @@ use crate::utils::str_to_date;
 
 pub struct Viewer {
     /// The pool of connections to the database
-    db_pool: Option<Pool>,
+    db: Option<DatabaseConnection>,
     /// The HTTP client for connecting to the server
     http_client: HttpClient,
 
@@ -56,9 +56,9 @@ fn get_http_client() -> HttpClient {
 
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db_pool: Option<Pool>, insert_comic_lock: Arc<Mutex<()>>) -> Self {
+    pub fn new(db: Option<DatabaseConnection>, insert_comic_lock: Arc<Mutex<()>>) -> Self {
         Self {
-            db_pool,
+            db,
             http_client: get_http_client(),
             comic_scraper: ComicScraper::new(insert_comic_lock),
             latest_date_scraper: LatestDateScraper::new(),
@@ -130,9 +130,9 @@ impl Viewer {
         // Execute both in parallel, as they are independent of each other.
         let (comic_data_res, latest_comic_res) = futures::join!(
             self.comic_scraper
-                .get_comic_data(&self.db_pool, &self.http_client, date),
+                .get_comic_data(&self.db, &self.http_client, date),
             self.latest_date_scraper
-                .get_latest_date(&self.db_pool, &self.http_client)
+                .get_latest_date(&self.db, &self.http_client)
         );
         let latest_comic = &latest_comic_res?;
 
@@ -148,7 +148,7 @@ impl Viewer {
                 );
                 let comic_data = self
                     .comic_scraper
-                    .get_comic_data(&self.db_pool, &self.http_client, latest_comic)
+                    .get_comic_data(&self.db, &self.http_client, latest_comic)
                     .await?;
                 if let Some(comic_data) = comic_data {
                     comic_data
@@ -173,7 +173,7 @@ impl Viewer {
             latest_comic_date = date;
             // Cache the new value of the latest comic date
             self.latest_date_scraper
-                .update_latest_date(&self.db_pool, &date.format(SRC_DATE_FMT).to_string())
+                .update_latest_date(&self.db, &date.format(SRC_DATE_FMT).to_string())
                 .await?;
         };
 

@@ -19,8 +19,8 @@ use std::borrow::Borrow;
 
 use async_trait::async_trait;
 use awc::Client as HttpClient;
-use deadpool_postgres::Pool;
 use log::{error, info};
+use sea_orm::DatabaseConnection;
 
 use crate::errors::AppResult;
 
@@ -35,23 +35,23 @@ where
     /// If data is not found in the cache, None should be returned.
     ///
     /// # Arguments:
-    /// * `db_pool` - The pool of connections to the DB
+    /// * `db` - The pool of connections to the DB
     /// * `reference` - The reference to the data that is to be retrieved
     async fn get_cached_data(
         &self,
-        db_pool: &Option<Pool>,
+        db: &Option<DatabaseConnection>,
         reference: &Ref,
     ) -> AppResult<Option<Data>>;
 
     /// Cache data into the database.
     ///
     /// # Arguments:
-    /// * `db_pool` - The pool of connections to the DB
+    /// * `db` - The pool of connections to the DB
     /// * `data` - The data that is to be cached
     /// * `reference` - The reference to the data that is to be retrieved
     async fn cache_data(
         &self,
-        db_pool: &Option<Pool>,
+        db: &Option<DatabaseConnection>,
         data: &DataBorrowed,
         reference: &Ref,
     ) -> AppResult<()>;
@@ -68,16 +68,16 @@ where
     /// Since caching failure is not fatal, we simply log it and ignore it.
     ///
     /// # Arguments:
-    /// * `db_pool` - The pool of connections to the DB
+    /// * `db` - The pool of connections to the DB
     /// * `data` - The data that is to be cached
     /// * `reference` - The reference to the data that is to be retrieved
     async fn safely_cache_data(
         &self,
-        db_pool: &Option<Pool>,
+        db: &Option<DatabaseConnection>,
         data: &DataBorrowed,
         reference: &Ref,
     ) {
-        if let Err(err) = self.cache_data(db_pool, data, reference).await {
+        if let Err(err) = self.cache_data(db, data, reference).await {
             error!("{:?}", err);
         }
     }
@@ -85,17 +85,17 @@ where
     /// Retrieve the data, either from the source or from cache.
     ///
     /// # Arguments
-    /// * `db_pool` - The pool of connections to the DB
+    /// * `db` - The pool of connections to the DB
     /// * `http_client` - The HTTP client for scraping from the source
     /// * `reference` - The thing that uniquely identifies the data that is requested, i.e. a
     ///                 reference to the requested data
     async fn get_data(
         &self,
-        db_pool: &Option<Pool>,
+        db: &Option<DatabaseConnection>,
         http_client: &HttpClient,
         reference: &Ref,
     ) -> AppResult<Data> {
-        match self.get_cached_data(db_pool, reference).await {
+        match self.get_cached_data(db, reference).await {
             Ok(None) => {}
             Ok(Some(data)) => {
                 info!("Successful retrieval from cache");
@@ -111,8 +111,7 @@ where
         let data = self.scrape_data(http_client, reference).await?;
         info!("Scraped data from source");
 
-        self.safely_cache_data(db_pool, data.borrow(), reference)
-            .await;
+        self.safely_cache_data(db, data.borrow(), reference).await;
         info!("Cached scraped data");
 
         Ok(data)

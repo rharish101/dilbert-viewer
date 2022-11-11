@@ -20,31 +20,30 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use awc::{http::StatusCode, Client as HttpClient};
 use chrono::NaiveDate;
-use deadpool_postgres::Pool;
 use html_escape::decode_html_entities;
 use log::{debug, error, info};
+use sea_orm::{
+    sea_query::{Expr, OnConflict},
+    ColumnTrait, DatabaseConnection, DbBackend, EntityTrait, FromQueryResult, QueryFilter,
+    QueryOrder, QuerySelect, QueryTrait, Set, Statement,
+};
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 use tokio::sync::Mutex;
 
 use crate::constants::{CACHE_LIMIT, SRC_DATE_FMT, SRC_PREFIX};
+use crate::entities::{comic_cache, prelude::ComicCache};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::str_to_date;
 
-// All SQL statements
-const UPDATE_LAST_USED_STMT: &str = "UPDATE comic_cache SET last_used = DEFAULT WHERE comic = $1;";
+// Raw SQL statement to get the approximate rows
 const APPROX_ROWS_STMT: &str = "SELECT reltuples FROM pg_class WHERE relname = 'comic_cache';";
-const CLEAN_CACHE_STMT: &str = "
-    DELETE FROM comic_cache
-    WHERE ctid in
-    (SELECT ctid FROM comic_cache ORDER BY last_used LIMIT $1);";
-const FETCH_COMIC_STMT: &str =
-    "SELECT img_url, title, img_width, img_height FROM comic_cache WHERE comic = $1;";
-const INSERT_COMIC_STMT: &str = "
-    INSERT INTO comic_cache (comic, img_url, title, img_width, img_height)
-    VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT (comic) DO UPDATE
-        SET last_used = DEFAULT;";
+
+/// Type used to capture the result of the approximate row query
+#[derive(Debug, FromQueryResult)]
+struct ApproxRows {
+    reltuples: f32,
+}
 
 pub struct ComicData {
     /// The date of the comic
@@ -79,32 +78,43 @@ impl ComicScraper {
     }
 
     /// Update the last used date for the given comic.
-    async fn update_last_used(db_pool: &Option<Pool>, date: NaiveDate) -> AppResult<()> {
+    async fn update_last_used(db: &Option<DatabaseConnection>, date: NaiveDate) -> AppResult<()> {
         info!("Updating `last_used` for data in cache");
-        if let Some(db_pool) = db_pool {
-            db_pool
-                .get()
-                .await?
-                .execute(UPDATE_LAST_USED_STMT, &[&date])
+        if let Some(db) = db {
+            ComicCache::update_many()
+                .col_expr(comic_cache::Column::LastUsed, Expr::cust("DEFAULT"))
+                .filter(comic_cache::Column::Comic.eq(date))
+                .exec(db)
                 .await?;
         };
         Ok(())
     }
 
     /// Remove excess rows from the cache.
-    async fn clean_cache(db_pool: &Option<Pool>) -> AppResult<()> {
+    async fn clean_cache(db: &Option<DatabaseConnection>) -> AppResult<()> {
         // This is an approximate of the no. of rows in the `comic_cache` table.  This is much
         // faster than the accurate measurement, as given here:
         // https://wiki.postgresql.org/wiki/Count_estimate
-        let db_client = if let Some(db_pool) = db_pool {
-            db_pool.get().await?
+        let db = if let Some(db) = db {
+            db
         } else {
             return Ok(());
         };
-        let approx_rows: f32 = db_client
-            .query_one(APPROX_ROWS_STMT, &[])
-            .await?
-            .try_get(0)?;
+
+        let approx_rows = ApproxRows::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            APPROX_ROWS_STMT,
+            vec![],
+        ))
+        .one(db)
+        .await?;
+
+        let approx_rows: u64 = if let Some(result) = approx_rows {
+            result.reltuples as u64
+        } else {
+            error!("Couldn't get approximate rows for the comic cache; skipping cleaning");
+            return Ok(());
+        };
 
         if approx_rows < CACHE_LIMIT {
             info!(
@@ -114,13 +124,21 @@ impl ComicScraper {
             return Ok(());
         }
 
-        let rows_to_clear = approx_rows - CACHE_LIMIT + 1.0;
+        let rows_to_clear = approx_rows - CACHE_LIMIT + 1;
         info!(
             "No. of rows in `comic_cache` ({}) exceeds the limit ({}); now clearing the oldest {} rows",
             approx_rows, CACHE_LIMIT, rows_to_clear
         );
-        db_client
-            .execute(CLEAN_CACHE_STMT, &[&rows_to_clear])
+        ComicCache::delete_many()
+            .filter(
+                comic_cache::Column::Comic.in_subquery(
+                    ComicCache::find()
+                        .order_by_asc(comic_cache::Column::LastUsed)
+                        .limit(rows_to_clear)
+                        .into_query(),
+                ),
+            )
+            .exec(db)
             .await?;
         Ok(())
     }
@@ -128,16 +146,16 @@ impl ComicScraper {
     /// Retrieve the data for the requested comic.
     ///
     /// # Arguments
-    /// * `db_pool` - The pool of connections to the DB
+    /// * `db` - The pool of connections to the DB
     /// * `http_client` - The HTTP client for scraping from the source
     /// * `date` - The date of the requested comic
     pub async fn get_comic_data(
         &self,
-        db_pool: &Option<Pool>,
+        db: &Option<DatabaseConnection>,
         http_client: &HttpClient,
         date: &str,
     ) -> AppResult<Option<ComicData>> {
-        match self.get_data(db_pool, http_client, date).await {
+        match self.get_data(db, http_client, date).await {
             Ok(comic_data) => Ok(Some(comic_data)),
             Err(AppError::NotFound(_)) => Ok(None),
             Err(err) => Err(err),
@@ -153,7 +171,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
     /// found in the cache, None is returned.
     async fn get_cached_data(
         &self,
-        db_pool: &Option<Pool>,
+        db: &Option<DatabaseConnection>,
         date: &str,
     ) -> AppResult<Option<ComicData>> {
         let date = str_to_date(date, SRC_DATE_FMT)?;
@@ -162,34 +180,31 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         // invalid (i.e. it would redirect to a comic with a different date), we cannot retrieve
         // the correct date from the cache, as we aren't caching the mapping of incorrect:correct
         // dates. `last_used` will be updated later.
-        let rows = if let Some(db_pool) = db_pool {
-            db_pool
-                .get()
-                .await?
-                .query(FETCH_COMIC_STMT, &[&date])
-                .await?
+        let row = if let Some(db) = db {
+            ComicCache::find_by_id(date).one(db).await?
         } else {
             return Ok(None);
         };
 
-        if rows.is_empty() {
+        let row = if let Some(row) = row {
+            row
+        } else {
             // This means that the comic for this date wasn't cached, or the date is invalid (i.e.
             // it would redirect to a comic with a different date).
             return Ok(None);
-        }
+        };
 
-        let comic_row = &rows[0];
         let comic_data = ComicData {
             date,
-            img_url: comic_row.try_get(0)?,
-            title: comic_row.try_get(1)?,
-            img_width: comic_row.try_get(2)?,
-            img_height: comic_row.try_get(3)?,
+            img_url: row.img_url,
+            title: row.title,
+            img_width: row.img_width,
+            img_height: row.img_height,
         };
 
         // Update `last_used`, so that this comic isn't accidently de-cached. We want to keep the
         // most recently used comics in the cache, and we are currently using this comic.
-        Self::update_last_used(db_pool, date).await?;
+        Self::update_last_used(db, date).await?;
 
         Ok(Some(comic_data))
     }
@@ -197,12 +212,12 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
     /// Cache the comic data into the database.
     async fn cache_data(
         &self,
-        db_pool: &Option<Pool>,
+        db: &Option<DatabaseConnection>,
         comic_data: &ComicData,
         _date: &str,
     ) -> AppResult<()> {
-        let db_client = if let Some(db_pool) = db_pool {
-            db_pool.get().await?
+        let db_conn = if let Some(db) = db {
+            db
         } else {
             return Ok(());
         };
@@ -219,23 +234,27 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         let _lock_guard = self.insert_comic_lock.lock().await;
         debug!("Got the comic insertion lock");
 
-        if let Err(err) = Self::clean_cache(db_pool).await {
+        if let Err(err) = Self::clean_cache(db).await {
             // This crash means that there can be some extra rows in the cache. As the row limit is
             // a little conservative, this should not be a big issue.
             error!("Failed to clean comics cache: {:#?}", err);
         }
 
-        db_client
-            .execute(
-                INSERT_COMIC_STMT,
-                &[
-                    &comic_data.date,
-                    &comic_data.img_url,
-                    &comic_data.title,
-                    &comic_data.img_width,
-                    &comic_data.img_height,
-                ],
+        let row = comic_cache::ActiveModel {
+            comic: Set(comic_data.date),
+            img_url: Set(comic_data.img_url.clone()),
+            title: Set(comic_data.title.clone()),
+            img_width: Set(comic_data.img_width),
+            img_height: Set(comic_data.img_height),
+            ..Default::default()
+        };
+        ComicCache::insert(row)
+            .on_conflict(
+                OnConflict::column(comic_cache::Column::Comic)
+                    .value(comic_cache::Column::LastUsed, Expr::cust("DEFAULT"))
+                    .clone(),
             )
+            .exec(db_conn)
             .await?;
         Ok(())
     }

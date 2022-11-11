@@ -17,6 +17,7 @@
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 mod app;
 mod constants;
+mod entities;
 mod errors;
 mod scrapers;
 mod templates;
@@ -36,12 +37,10 @@ use actix_web::{
     web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
 use chrono::Duration as DateDuration;
-use deadpool_postgres::{Manager, Pool};
 use log::{error, info};
-use native_tls::TlsConnector;
-use postgres_native_tls::MakeTlsConnector;
 use rand::{thread_rng, Rng};
-use tokio_postgres::config::{Config as PgConfig, SslMode};
+use sea_orm::{DatabaseConnection, SqlxPostgresConnector};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
 
 use crate::app::Viewer;
 use crate::constants::{
@@ -51,20 +50,19 @@ use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
 
 /// Initialize the database connection pool for caching data.
-fn get_db_pool() -> Result<Pool, DbInitError> {
+async fn get_db_pool() -> Result<DatabaseConnection, DbInitError> {
     // Heroku needs SSL for its PostgreSQL DB, but uses a self-signed certificate. So simply
     // disable verification while keeping SSL.
-    let tls_connector = TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()?;
-    let tls = MakeTlsConnector::new(tls_connector);
+    let connect_opts = PgConnectOptions::from_str(env::var("DATABASE_URL")?.as_str())?
+        .ssl_mode(PgSslMode::Require);
 
-    let mut pg_config = PgConfig::from_str(env::var("DATABASE_URL")?.as_str())?;
-    pg_config.ssl_mode(SslMode::Require); // Heroku needs this.
-    pg_config.connect_timeout(TimeDuration::from_secs(DB_TIMEOUT));
+    let pool_opts = PgPoolOptions::new()
+        .acquire_timeout(TimeDuration::from_secs(DB_TIMEOUT))
+        .max_connections(MAX_DB_CONN);
 
-    let manager = Manager::new(pg_config, tls);
-    Ok(Pool::builder(manager).max_size(MAX_DB_CONN).build()?)
+    Ok(SqlxPostgresConnector::from_sqlx_postgres_pool(
+        pool_opts.connect_with(connect_opts).await?,
+    ))
 }
 
 /// Serve the latest comic.
@@ -141,7 +139,7 @@ async fn main() -> IOResult<()> {
     info!("Starting server at {}", host);
 
     // Create all worker-shared (i.e. thread-safe) structs here
-    let db_pool = match get_db_pool() {
+    let db_pool = match get_db_pool().await {
         Ok(pool) => Some(pool),
         Err(err) => {
             error!(

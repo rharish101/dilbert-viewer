@@ -18,10 +18,9 @@
 use std::env;
 
 use awc::error::{PayloadError, SendRequestError};
-use deadpool_postgres::{BuildError, PoolError};
 use minify_html::Error as MinifyHtmlError;
+use sqlx::Error as SqlError;
 use thiserror::Error;
-use tokio_postgres::error::Error as PgError;
 
 #[derive(Error, Debug)]
 /// Errors when initializing the database pool
@@ -29,15 +28,9 @@ pub enum DbInitError {
     /// Error reading the DB URL from the environment
     #[error("Missing environment variable for the database URL: {0}")]
     Env(#[from] env::VarError),
-    /// Error parsing the DB URL
-    #[error("Error parsing the database URL: {0}")]
-    Db(#[from] PgError),
-    /// Error in building an SSL connector
-    #[error("Error building an SSL connector: {0}")]
-    Tls(#[from] native_tls::Error),
-    /// Error in building the DB connection pool
-    #[error("Error building the database connection pool: {0}")]
-    Pool(#[from] BuildError),
+    /// Error initializing the DB connection
+    #[error("Error initializing the database connection: {0}")]
+    Db(#[from] SqlError),
 }
 
 #[derive(Error, Debug)]
@@ -69,9 +62,9 @@ impl From<MinifyHtmlError> for MinificationError {
 #[derive(Error, Debug)]
 /// All errors raised by the viewer app
 pub enum AppError {
-    /// Errors in getting a connection from the DB pool, or when executing a DB query
-    #[error("Database pool error: {0}")]
-    Db(#[from] PoolError),
+    /// Errors when executing a DB query
+    #[error("Database error: {0}")]
+    Db(#[from] sea_orm::DbErr),
     /// Errors in initializing the DB
     #[error("Error initializing the database: {0}")]
     DbInit(#[from] DbInitError),
@@ -110,12 +103,6 @@ where
 {
     fn from(err: E) -> Self {
         Self::Http(err.into())
-    }
-}
-
-impl From<PgError> for AppError {
-    fn from(err: PgError) -> Self {
-        Self::Db(PoolError::Backend(err))
     }
 }
 
