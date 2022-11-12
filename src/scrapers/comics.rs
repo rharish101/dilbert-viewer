@@ -263,11 +263,22 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
     async fn scrape_data(&self, http_client: &HttpClient, date: &str) -> AppResult<ComicData> {
         let url = String::from(SRC_PREFIX) + date;
         let mut resp = http_client.get(url).send().await?;
+        let status = resp.status();
 
-        if resp.status() == StatusCode::FOUND {
-            // Redirected to homepage, implying that there's no comic for this date
-            return Err(AppError::NotFound(format!("Comic for {} not found", date)));
-        }
+        match status {
+            StatusCode::FOUND => {
+                // Redirected to homepage, implying that there's no comic for this date
+                return Err(AppError::NotFound(format!("Comic for {} not found", date)));
+            }
+            StatusCode::OK => (),
+            _ => {
+                error!("Unexpected response status: {}", status);
+                return Err(AppError::Scrape(format!(
+                    "Couldn't scrape comic: {:#?}",
+                    resp.body().await?
+                )));
+            }
+        };
 
         let bytes = resp.body().await?;
         let content = match std::str::from_utf8(&bytes) {

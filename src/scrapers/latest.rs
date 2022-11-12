@@ -20,7 +20,7 @@ use std::cmp::Ordering;
 use async_trait::async_trait;
 use awc::{http::StatusCode, Client as HttpClient};
 use chrono::Duration;
-use log::{info, warn};
+use log::{error, info, warn};
 use sea_orm::{sea_query::Expr, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use crate::constants::{LATEST_DATE_REFRESH, SRC_DATE_FMT, SRC_PREFIX};
@@ -152,25 +152,36 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         let url = String::from(SRC_PREFIX) + &latest;
 
         info!("Trying date \"{}\" for latest comic", latest);
-        let resp = http_client.get(url).send().await?;
+        let mut resp = http_client.get(url).send().await?;
+        let status = resp.status();
 
-        if resp.status() == StatusCode::FOUND {
-            // Redirected to homepage, implying that there's no comic for this date. There must
-            // be a comic for the previous date, so use that.
-            let date = (curr_date() - Duration::days(1))
-                .format(SRC_DATE_FMT)
-                .to_string();
-            info!(
-                "No comic found for today ({}); using date: {}",
-                latest, date
-            );
-            Ok(date)
-        } else {
-            info!(
-                "Found comic for today ({}); using it as latest date",
-                latest
-            );
-            Ok(latest)
+        match status {
+            StatusCode::FOUND => {
+                // Redirected to homepage, implying that there's no comic for this date. There must
+                // be a comic for the previous date, so use that.
+                let date = (curr_date() - Duration::days(1))
+                    .format(SRC_DATE_FMT)
+                    .to_string();
+                info!(
+                    "No comic found for today ({}); using date: {}",
+                    latest, date
+                );
+                Ok(date)
+            }
+            StatusCode::OK => {
+                info!(
+                    "Found comic for today ({}); using it as latest date",
+                    latest
+                );
+                Ok(latest)
+            }
+            _ => {
+                error!("Unexpected response status: {}", status);
+                Err(AppError::Scrape(format!(
+                    "Couldn't scrape latest date: {:#?}",
+                    resp.body().await?
+                )))
+            }
         }
     }
 }
