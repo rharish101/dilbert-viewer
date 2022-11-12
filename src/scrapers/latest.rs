@@ -79,6 +79,7 @@ impl Scraper<String, str, ()> for LatestDateScraper {
         db: &Option<DatabaseConnection>,
         _reference: &(),
     ) -> AppResult<Option<String>> {
+        // Get the latest date if it has been updated within the last `LATEST_DATE_REFRESH` hours
         let last_fresh_time = curr_datetime() - Duration::hours(LATEST_DATE_REFRESH);
         let row = if let Some(db) = db {
             LatestDate::find()
@@ -121,9 +122,10 @@ impl Scraper<String, str, ()> for LatestDateScraper {
 
         match update_result.rows_affected.cmp(&1) {
             Ordering::Greater => {
-                let msg =
-                    "The \"latest_date\" table has more than one row, i.e. this table is corrupt";
-                return Err(AppError::Internal(String::from(msg)));
+                return Err(AppError::Internal(
+                    "The \"latest_date\" table has more than one row, i.e. this table is corrupt"
+                        .into(),
+                ));
             }
             Ordering::Less => (),
             Ordering::Equal => {

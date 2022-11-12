@@ -68,11 +68,16 @@ impl Viewer {
     fn minify_html(mut html: String) -> AppResult<String> {
         let old_len = html.len();
         let result = minify_html::in_place_str(html.as_mut_str(), &minify_html::Cfg::new());
+
+        // The in-place minification returns a slice to the minified part, but leaves the rest of
+        // the string as-is. Hence, we get the length of the slice and truncate the string, since
+        // we want to return an owned string.
         let new_len = match result {
             Ok(slice) => slice.len(),
             Err(err) => Err(MinificationError::Html(err))?,
         };
         html.truncate(new_len);
+
         debug!("Minified HTML from {} bytes to {}", old_len, html.len());
         Ok(html)
     }
@@ -100,13 +105,6 @@ impl Viewer {
             .format(SRC_DATE_FMT)
             .to_string();
 
-        // Whether to disable left/right navigation buttons
-        let disable_left_nav = date == first_comic;
-        let disable_right_nav = date == latest_comic;
-
-        // Link to original strip on "dilbert.com"
-        let permalink = &format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT));
-
         let webpage = ComicTemplate {
             data: comic_data,
             date_disp: &comic_data.date.format(DISP_DATE_FMT).to_string(),
@@ -114,12 +112,13 @@ impl Viewer {
             first_comic: &first_comic.format(SRC_DATE_FMT).to_string(),
             previous_comic,
             next_comic,
-            disable_left_nav,
-            disable_right_nav,
-            permalink,
+            disable_left_nav: date == first_comic,
+            disable_right_nav: date == latest_comic,
+            permalink: &format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT)),
             repo: REPO,
         }
         .render()?;
+
         Ok(HttpResponse::Ok()
             .content_type(ContentType::html())
             .body(Self::minify_html(webpage)?))
@@ -155,9 +154,9 @@ impl Viewer {
                 } else {
                     // This means that the "latest date", either from the DB or by scraping,
                     // doesn't have a comic. This should NEVER happen.
-                    return Err(AppError::Internal(String::from(
-                        "No comic found for the latest date",
-                    )));
+                    return Err(AppError::Internal(
+                        "No comic found for the latest date".into(),
+                    ));
                 }
             } else {
                 return Self::serve_404_raw(Some(date));
@@ -215,9 +214,7 @@ impl Viewer {
         let minified = match minifier::css::minify(css_str) {
             Ok(minified) => minified.to_string(),
             Err(err) => {
-                return Self::serve_500(&AppError::Minify(MinificationError::Css(String::from(
-                    err,
-                ))))
+                return Self::serve_500(&AppError::Minify(MinificationError::Css(err.into())))
             }
         };
         debug!(
@@ -265,6 +262,8 @@ impl Viewer {
         let error_template = ErrorTemplate { error, repo: REPO };
         match error_template.render() {
             Ok(webpage) => {
+                // Minification can crash, so if it fails, just serve the original. Since
+                // minification modifies the input, give it a clone.
                 let minified = if let Ok(html) = Self::minify_html(webpage.clone()) {
                     html
                 } else {
@@ -274,6 +273,7 @@ impl Viewer {
             }
             Err(err) => {
                 error!("Couldn't render Error 500 HTML: {}", err);
+                // An empty Error 500 response is still better than crashing
                 response.finish()
             }
         }

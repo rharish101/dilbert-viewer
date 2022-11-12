@@ -36,7 +36,9 @@ use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::str_to_date;
 
-// Raw SQL statement to get the approximate rows
+// Raw SQL statement to get the approximate rows.
+// This is an approximate of the no. of rows in the `comic_cache` table. This is much faster than
+// the accurate measurement, as given here: https://wiki.postgresql.org/wiki/Count_estimate
 const APPROX_ROWS_STMT: &str = "SELECT reltuples FROM pg_class WHERE relname = 'comic_cache';";
 
 /// Type used to capture the result of the approximate row query
@@ -92,15 +94,13 @@ impl ComicScraper {
 
     /// Remove excess rows from the cache.
     async fn clean_cache(db: &Option<DatabaseConnection>) -> AppResult<()> {
-        // This is an approximate of the no. of rows in the `comic_cache` table.  This is much
-        // faster than the accurate measurement, as given here:
-        // https://wiki.postgresql.org/wiki/Count_estimate
         let db = if let Some(db) = db {
             db
         } else {
             return Ok(());
         };
 
+        // Getting the approximate rows is much faster than getting the actual row count
         let approx_rows = ApproxRows::find_by_statement(Statement::from_sql_and_values(
             DbBackend::Postgres,
             APPROX_ROWS_STMT,
@@ -117,7 +117,7 @@ impl ComicScraper {
         };
 
         if approx_rows < CACHE_LIMIT {
-            info!(
+            debug!(
                 "No. of rows in `comic_cache` ({}) is less than the limit ({})",
                 approx_rows, CACHE_LIMIT
             );
@@ -175,11 +175,6 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         date: &str,
     ) -> AppResult<Option<ComicData>> {
         let date = str_to_date(date, SRC_DATE_FMT)?;
-        // The other columns in the table are: `comic`, `last_used`. `comic` is not required here,
-        // as we already have the date as a function argument. In case the date given here is
-        // invalid (i.e. it would redirect to a comic with a different date), we cannot retrieve
-        // the correct date from the cache, as we aren't caching the mapping of incorrect:correct
-        // dates. `last_used` will be updated later.
         let row = if let Some(db) = db {
             ComicCache::find_by_id(date).one(db).await?
         } else {
@@ -190,10 +185,15 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             row
         } else {
             // This means that the comic for this date wasn't cached, or the date is invalid (i.e.
-            // it would redirect to a comic with a different date).
+            // it would redirect to the homepage).
             return Ok(None);
         };
 
+        // The other columns in the table are: `comic`, `last_used`. `comic` is not required here,
+        // as we already have the date as a function argument. In case the date given here is
+        // invalid (i.e. it would redirect to the homepage), we cannot retrieve the correct date
+        // from the cache, as we aren't caching the mapping of incorrect:correct dates. `last_used`
+        // will be updated later.
         let comic_data = ComicData {
             date,
             img_url: row.img_url,
@@ -283,7 +283,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         let bytes = resp.body().await?;
         let content = match std::str::from_utf8(&bytes) {
             Ok(text) => text,
-            Err(_) => return Err(AppError::Scrape(String::from("Response is not UTF-8"))),
+            Err(_) => return Err(AppError::Scrape("Response is not UTF-8".into())),
         };
 
         let dom = parse_html(content, ParserOptions::default())?;
@@ -294,6 +294,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
                 .and_then(|handle| handle.get(parser))
         };
 
+        // The title element is the only tag with the class "comic-title-name"
         let title = if let Some(node) = get_first_node_by_class("comic-title-name") {
             decode_html_entities(&node.inner_text(parser)).into_owned()
         } else {
@@ -301,13 +302,14 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
             String::new()
         };
 
+        // The image element is the only tag with the class "img-comic"
         let img_attrs =
             if let Some(tag) = get_first_node_by_class("img-comic").and_then(Node::as_tag) {
                 tag.attributes()
             } else {
-                return Err(AppError::Scrape(String::from(
-                    "Error in scraping the image's details",
-                )));
+                return Err(AppError::Scrape(
+                    "Error in scraping the image's details".into(),
+                ));
             };
         let get_i32_img_attr = |attr| -> Option<i32> {
             img_attrs
@@ -317,22 +319,25 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
                 .and_then(|attr_str| attr_str.parse().ok())
         };
 
+        // The image width is the "width" attribute of the image element
         let img_width = if let Some(width) = get_i32_img_attr("width") {
             width
         } else {
-            return Err(AppError::Scrape(String::from(
-                "Error in scraping the image's width",
-            )));
+            return Err(AppError::Scrape(
+                "Error in scraping the image's width".into(),
+            ));
         };
 
+        // The image height is the "height" attribute of the image element
         let img_height = if let Some(height) = get_i32_img_attr("height") {
             height
         } else {
-            return Err(AppError::Scrape(String::from(
-                "Error in scraping the image's height",
-            )));
+            return Err(AppError::Scrape(
+                "Error in scraping the image's height".into(),
+            ));
         };
 
+        // The image URL is the "src" attribute of the image element
         let img_url = if let Some(url) = img_attrs
             .get("src")
             .flatten()
@@ -340,9 +345,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         {
             String::from(url)
         } else {
-            return Err(AppError::Scrape(String::from(
-                "Error in scraping the image's URL",
-            )));
+            return Err(AppError::Scrape("Error in scraping the image's URL".into()));
         };
 
         Ok(ComicData {
