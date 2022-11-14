@@ -28,7 +28,7 @@ use sea_orm::DatabaseConnection;
 use tokio::sync::Mutex;
 
 use crate::constants::{
-    DISP_DATE_FMT, FIRST_COMIC, REPO_URL, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX,
+    APP_URL, DISP_DATE_FMT, FIRST_COMIC, REPO_URL, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX,
 };
 use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
@@ -117,6 +117,7 @@ impl Viewer {
             disable_left_nav: date == first_comic,
             disable_right_nav: date == latest_comic,
             permalink: &format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT)),
+            app_url: APP_URL,
             repo_url: REPO_URL,
         }
         .render()?;

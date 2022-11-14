@@ -17,7 +17,7 @@ You should have received a copy of the GNU Affero General Public License
 along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 #}
 <!DOCTYPE HTML>
-<html lang="en">
+<html lang="en" prefix="og: http://ogp.me/ns#">
 
 <head>
   <title>{% if data.title.is_empty() %}Comic Strip on {{ date }}{% else %}{{ data.title }}{% endif %} - Dilbert Viewer</title>
@@ -28,6 +28,14 @@ along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Dilbert comic strip on {{ date_disp }}, viewed using a simple comic viewer." />
   <meta name="keywords" content="dilbert, dilbert comic strip, dilbert comic viewer, comics, web comics" />
+  <meta property="og:title" content="{% if data.title.is_empty() %}Comic Strip on {{ date }}{% else %}{{ data.title }}{% endif %}">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="{{ data.img_url }}">
+  <meta property="og:image:width" content="{{ data.img_width }}">
+  <meta property="og:image:height" content="{{ data.img_height }}">
+  <meta property="og:url" content="{{ app_url }}/{{ date }}">
+  <meta property="og:description" content="Dilbert comic strip on {{ date_disp }}, viewed using a simple comic viewer.">
+  <meta name="twitter:card" content="summary_large_image">
 </head>
 
 <body class="text-center m-0 p-1">

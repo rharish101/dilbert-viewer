@@ -44,6 +44,8 @@ pub struct ComicTemplate<'a> {
     pub disable_right_nav: bool,
     /// Link to the original source comic
     pub permalink: &'a str,
+    /// Link to the app where this code is deployed
+    pub app_url: &'a str,
     /// Link to the repo where this code is hosted
     pub repo_url: &'a str,
 }

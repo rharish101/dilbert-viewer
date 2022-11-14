@@ -55,6 +55,9 @@ pub const SRC_PREFIX: &str = "https://dilbert.com/strip/";
 /// Default port when one isn't specified
 // This is Heroku's default port when running locally
 pub const PORT: &str = "5000";
+/// Link to the public version of this app
+// Used in the OpenGraph tags
+pub const APP_URL: &str = "https://dilbert-viewer.herokuapp.com/";
 /// Link to the public version of this repo
 // Mainly for publicity :P
 pub const REPO_URL: &str = "https://github.com/rharish101/dilbert-viewer";
