@@ -82,7 +82,7 @@ async fn latest_comic(viewer: web::Data<Viewer>) -> impl Responder {
 async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(u16, u16, u16)>) -> impl Responder {
     let (year, month, day) = path.into_inner();
 
-    // NOTE: This depends on the format given by `crate::constants::DATE_FMT`.
+    // NOTE: This depends on the format given by `crate::constants::SRC_DATE_FMT`.
     let date = format!("{:04}-{:02}-{:02}", year, month, day);
 
     // Check to see if the date is invalid.
@@ -97,7 +97,7 @@ async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(u16, u16, u16)>)
 #[get("/random")]
 async fn random_comic() -> impl Responder {
     let first = str_to_date(FIRST_COMIC, SRC_DATE_FMT)
-        .expect("Variable FIRST_COMIC not in format of variable DATE_FMT");
+        .expect("Variable FIRST_COMIC not in format of variable SRC_DATE_FMT");
     // There might not be any comic for this date yet, so exclude the latest date.
     let latest = curr_date() - DateDuration::days(1);
 
