@@ -45,7 +45,7 @@ pub struct ComicTemplate<'a> {
     /// Link to the original source comic
     pub permalink: &'a str,
     /// Link to the repo where this code is hosted
-    pub repo: &'a str,
+    pub repo_url: &'a str,
 }
 
 /// The template for a 404 not found page
@@ -55,7 +55,7 @@ pub struct NotFoundTemplate<'a> {
     /// The date of the requested comic, if available
     pub date: Option<&'a str>,
     /// Link to the repo where this code is hosted
-    pub repo: &'a str,
+    pub repo_url: &'a str,
 }
 
 /// The template for a 500 internal server error page
@@ -65,5 +65,5 @@ pub struct ErrorTemplate<'a> {
     /// The error message of the interval server error
     pub error: &'a str,
     /// Link to the repo where this code is hosted
-    pub repo: &'a str,
+    pub repo_url: &'a str,
 }

@@ -57,7 +57,7 @@ pub const SRC_PREFIX: &str = "https://dilbert.com/strip/";
 pub const PORT: &str = "5000";
 /// Link to the public version of this repo
 // Mainly for publicity :P
-pub const REPO: &str = "https://github.com/rharish101/dilbert-viewer";
+pub const REPO_URL: &str = "https://github.com/rharish101/dilbert-viewer";
 /// URL path for static files
 // This is set to root as it's easy to serve robots.txt by keeping it in static.
 pub const STATIC_URL: &str = "/";

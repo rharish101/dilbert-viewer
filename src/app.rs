@@ -27,7 +27,9 @@ use log::{debug, error, info};
 use sea_orm::DatabaseConnection;
 use tokio::sync::Mutex;
 
-use crate::constants::{DISP_DATE_FMT, FIRST_COMIC, REPO, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX};
+use crate::constants::{
+    DISP_DATE_FMT, FIRST_COMIC, REPO_URL, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX,
+};
 use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
@@ -115,7 +117,7 @@ impl Viewer {
             disable_left_nav: date == first_comic,
             disable_right_nav: date == latest_comic,
             permalink: &format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT)),
-            repo: REPO,
+            repo_url: REPO_URL,
         }
         .render()?;
 
@@ -231,7 +233,11 @@ impl Viewer {
 
     /// Serve a 404 not found response for invalid URLs, without handling errors.
     fn serve_404_raw(date: Option<&str>) -> AppResult<HttpResponse> {
-        let webpage = NotFoundTemplate { date, repo: REPO }.render()?;
+        let webpage = NotFoundTemplate {
+            date,
+            repo_url: REPO_URL,
+        }
+        .render()?;
         Ok(HttpResponse::NotFound()
             .content_type(ContentType::html())
             .body(Self::minify_html(webpage)?))
@@ -259,7 +265,10 @@ impl Viewer {
         let error = &format!("{}", err);
         let mut response = HttpResponse::InternalServerError();
 
-        let error_template = ErrorTemplate { error, repo: REPO };
+        let error_template = ErrorTemplate {
+            error,
+            repo_url: REPO_URL,
+        };
         match error_template.render() {
             Ok(webpage) => {
                 // Minification can crash, so if it fails, just serve the original. Since
