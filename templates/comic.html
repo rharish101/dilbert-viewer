@@ -17,7 +17,7 @@ You should have received a copy of the GNU Affero General Public License
 along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 #}
 <!DOCTYPE HTML>
-<html lang="en" prefix="og: http://ogp.me/ns#">
+<html lang="en" prefix="og: http://ogp.me/ns#" class="w-100 h-100 d-flex flex-row justify-content-center align-items-start">
 
 <head>
   <title>{% if data.title.is_empty() %}Comic Strip on {{ date }}{% else %}{{ data.title }}{% endif %} - Dilbert Viewer</title>
@@ -38,7 +38,7 @@ along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
   <meta name="twitter:card" content="summary_large_image">
 </head>
 
-<body class="text-center m-0 p-1">
+<body class="d-flex flex-column justify-content-center align-items-center text-center m-0 p-1">
   <!-- Date and title (if exists) -->
   <h1 class="h4 mx-1 my-2">{{ date_disp }}</h1>
   <h2 class="h6 m-1">{{ data.title }}</h2>
