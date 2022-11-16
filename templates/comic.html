@@ -47,7 +47,7 @@ along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
   <img class="img-fluid my-3 px-2" alt="Comic for {{ date }}" src="{{ data.img_url }}" width="{{ data.img_width }}" height="{{ data.img_height }}"/>
 
   <!-- Navigation buttons -->
-  <div class="d-flex flex-row flex-nowrap btn-toolbar m-2" role="toolbar" aria-label="Navigation buttons">
+  <nav class="d-flex flex-row flex-nowrap btn-toolbar m-2" aria-label="Navigation buttons">
     <div class="btn-group m-1" role="group" aria-label="Go backwards buttons">
       <a href="/{{ first_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="First comic">&lt&lt</a>
       <a href="/{{ previous_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="Previous comic">&lt</a>
@@ -59,13 +59,13 @@ along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
       <a href="/{{ next_comic }}" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Next comic">&gt</a>
       <a href="/" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Latest comic">&gt&gt</a>
     </div>
-  </div>
+  </nav>
 
   <!-- Links to the source comic on "dilbert.com" -->
   <a href="{{ permalink }}" target="_blank" rel="noreferrer" role="button" class="btn btn-link m-1" aria-label="Link to the original comic">Original Comic</a>
 
   <!-- Links to the GitHub repo -->
-  <a href="{{ repo_url }}" target="_blank" rel="noreferrer" class="btn btn-dark m-1" aria-label="Link to the source code">
+  <a href="{{ repo_url }}" target="_blank" rel="noreferrer" role="button" class="btn btn-dark m-1" aria-label="Link to the source code">
     <img alt="GitHub Icon" src="github.svg" height="24" width="24" />
   </a>
 </body>
