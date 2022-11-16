@@ -17,7 +17,7 @@ You should have received a copy of the GNU Affero General Public License
 along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 #}
 <!DOCTYPE HTML>
-<html lang="en" class="w-100 h-100 d-flex flex-row justify-content-center align-items-start">
+<html lang="en" class="w-100 h-100">
 
 <head>
   <title>Internal Error - Dilbert Viewer</title>
@@ -30,32 +30,39 @@ along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
   <meta name="keywords" content="dilbert, dilbert comic strip, dilbert comic viewer, comics, web comics" />
 </head>
 
-<body class="d-flex flex-column justify-content-center align-items-center text-center m-0 p-1">
-  <h1 class="display-3 m-2">Internal Error</h1>
+<body class="d-flex flex-column justify-content-between align-items-center text-center m-0">
+  <!-- Dummy element to take up the top position -->
+  <header></header>
 
-  <!-- Try the obvious first :P -->
-  <p class="lead m-1 mb-4">
-    Try refreshing the page.
-    If it doesn't work, try a while later.
-  </p>
+  <!-- Element that contains the main content -->
+  <main class="w-100 d-flex flex-column align-items-center p-1">
+    <h1 class="display-3 m-2">Internal Error</h1>
 
-  <!-- Message for reporting issues -->
-  <p class="m-1">
-    If you see this message often, you can report an issue by
-    <a href="{{ repo_url }}/issues" target="_blank" rel="noreferrer">clicking here</a>.
-    Please check for existing issues before reporting them.
-  </p>
+    <!-- Try the obvious first :P -->
+    <p class="lead m-1 mb-4">
+      Try refreshing the page.
+      If it doesn't work, try a while later.
+    </p>
 
-  <!-- Display the error message -->
-  <div class="card text-start text-white bg-secondary m-4 mw-100">
-    <div class="card-header">Error message</div>
-    <pre class="card-body" aria-label="Error message">{{ error }}</pre>
-  </div>
+    <!-- Message for reporting issues -->
+    <p class="m-1">
+      If you see this message often, you can report an issue by
+      <a href="{{ repo_url }}/issues" target="_blank" rel="noreferrer">clicking here</a>.
+      Please check for existing issues before reporting them.
+    </p>
 
-  <!-- Link to the GitHub repo -->
-  <a href="{{ repo_url }}" target="_blank" rel="noreferrer" role="button" class="btn btn-dark m-1" aria-label="Link to the source code">
-    <img alt="GitHub Icon" src="github.svg" height="24" width="24" />
-  </a>
+    <!-- Display the error message -->
+    <div class="card text-start text-white bg-secondary m-4 mw-100">
+      <div class="card-header">Error message</div>
+      <pre class="card-body" aria-label="Error message">{{ error }}</pre>
+    </div>
+  </main>
+
+  <!-- Miscellaneous links -->
+  <footer class="w-100 d-flex flex-row justify-content-center bg-dark fs-6">
+    <!-- Link to the GitHub repo -->
+    <a href="{{ repo_url }}" target="_blank" rel="noreferrer" role="button" class="nav-link link-light" aria-label="Link to the source code">Source Code</a>
+  </footer>
 </body>
 
 </html>

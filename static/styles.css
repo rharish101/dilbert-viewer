@@ -17,6 +17,9 @@
  * along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
  */
 body {
-  max-width: 800px;
   min-height: 100%;
+}
+
+main {
+  max-width: 800px;
 }

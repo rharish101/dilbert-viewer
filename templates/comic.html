@@ -17,7 +17,7 @@ You should have received a copy of the GNU Affero General Public License
 along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 #}
 <!DOCTYPE HTML>
-<html lang="en" prefix="og: http://ogp.me/ns#" class="w-100 h-100 d-flex flex-row justify-content-center align-items-start">
+<html lang="en" prefix="og: http://ogp.me/ns#" class="w-100 h-100">
 
 <head>
   <title>{% if data.title.is_empty() %}Comic Strip on {{ date }}{% else %}{{ data.title }}{% endif %} - Dilbert Viewer</title>
@@ -38,36 +38,43 @@ along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
   <meta name="twitter:card" content="summary_large_image">
 </head>
 
-<body class="d-flex flex-column justify-content-center align-items-center text-center m-0 p-1">
-  <!-- Date and title (if exists) -->
-  <h1 class="h4 mx-1 my-2">{{ date_disp }}</h1>
-  <h2 class="h6 m-1">{{ data.title }}</h2>
+<body class="d-flex flex-column justify-content-between align-items-center text-center m-0">
+  <!-- Dummy element to take up the top position -->
+  <header></header>
 
-  <!-- Comic image -->
-  <img class="img-fluid my-3 px-2" alt="Comic for {{ date }}" src="{{ data.img_url }}" width="{{ data.img_width }}" height="{{ data.img_height }}"/>
+  <!-- Element that contains the main content -->
+  <main class="w-100 d-flex flex-column align-items-center p-1">
+    <!-- Date and title (if exists) -->
+    <h1 class="h4 mx-1 my-2">{{ date_disp }}</h1>
+    <h2 class="h6 m-1">{{ data.title }}</h2>
 
-  <!-- Navigation buttons -->
-  <nav class="d-flex flex-row flex-nowrap btn-toolbar m-2" aria-label="Navigation buttons">
-    <div class="btn-group m-1" role="group" aria-label="Go backwards buttons">
-      <a href="/{{ first_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="First comic">&lt&lt</a>
-      <a href="/{{ previous_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="Previous comic">&lt</a>
-    </div>
-    <div class="btn-group m-1" role="group" aria-label="Center buttons">
-      <a href="/random" role="button" class="btn btn-primary" aria-label="Random comic">Random</a>
-    </div>
-    <div class="btn-group m-1" role="group" aria-label="Go forwards buttons">
-      <a href="/{{ next_comic }}" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Next comic">&gt</a>
-      <a href="/" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Latest comic">&gt&gt</a>
-    </div>
-  </nav>
+    <!-- Comic image -->
+    <img class="img-fluid my-3 px-2" alt="Comic for {{ date }}" src="{{ data.img_url }}" width="{{ data.img_width }}" height="{{ data.img_height }}"/>
 
-  <!-- Links to the source comic on "dilbert.com" -->
-  <a href="{{ permalink }}" target="_blank" rel="noreferrer" role="button" class="btn btn-link m-1" aria-label="Link to the original comic">Original Comic</a>
+    <!-- Navigation buttons -->
+    <nav class="d-flex flex-row flex-nowrap btn-toolbar m-2" aria-label="Navigation buttons">
+      <div class="btn-group m-1" role="group" aria-label="Go backwards buttons">
+        <a href="/{{ first_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="First comic">&lt&lt</a>
+        <a href="/{{ previous_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="Previous comic">&lt</a>
+      </div>
+      <div class="btn-group m-1" role="group" aria-label="Center buttons">
+        <a href="/random" role="button" class="btn btn-primary" aria-label="Random comic">Random</a>
+      </div>
+      <div class="btn-group m-1" role="group" aria-label="Go forwards buttons">
+        <a href="/{{ next_comic }}" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Next comic">&gt</a>
+        <a href="/" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Latest comic">&gt&gt</a>
+      </div>
+    </nav>
 
-  <!-- Links to the GitHub repo -->
-  <a href="{{ repo_url }}" target="_blank" rel="noreferrer" role="button" class="btn btn-dark m-1" aria-label="Link to the source code">
-    <img alt="GitHub Icon" src="github.svg" height="24" width="24" />
-  </a>
+    <!-- Links to the source comic on "dilbert.com" -->
+    <a href="{{ permalink }}" target="_blank" rel="noreferrer" role="button" class="btn btn-link m-1" aria-label="Link to the original comic">Original Comic</a>
+  </main>
+
+  <!-- Miscellaneous links -->
+  <footer class="w-100 d-flex flex-row justify-content-center bg-dark fs-6">
+    <!-- Link to the GitHub repo -->
+    <a href="{{ repo_url }}" target="_blank" rel="noreferrer" role="button" class="nav-link link-light" aria-label="Link to the source code">Source Code</a>
+  </footer>
 </body>
 
 </html>
