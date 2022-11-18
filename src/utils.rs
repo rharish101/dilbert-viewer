@@ -21,7 +21,7 @@ use chrono::{format::ParseResult, NaiveDate, NaiveDateTime, Utc};
 ///
 /// The timezone is fixed to UTC so that the code is independent of local time.
 pub fn curr_date() -> NaiveDate {
-    Utc::today().naive_utc()
+    Utc::now().date_naive()
 }
 
 /// Return the current datetime.
