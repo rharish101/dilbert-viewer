@@ -167,8 +167,7 @@ impl ComicScraper {
 impl Scraper<ComicData, ComicData, str> for ComicScraper {
     /// Get the cached comic data from the database.
     ///
-    /// If the comic date entry is stale (i.e. it was updated a long time back), or it wasn't
-    /// found in the cache, None is returned.
+    /// If the comic date entry isn't in the cache, None is returned.
     async fn get_cached_data(
         &self,
         db: &Option<DatabaseConnection>,
