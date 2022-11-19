@@ -172,6 +172,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         &self,
         db: &Option<DatabaseConnection>,
         date: &str,
+        _fresh: bool,
     ) -> AppResult<Option<ComicData>> {
         let date = str_to_date(date, SRC_DATE_FMT)?;
         let row = if let Some(db) = db {

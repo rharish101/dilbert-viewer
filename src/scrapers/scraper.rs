@@ -19,7 +19,7 @@ use std::borrow::Borrow;
 
 use async_trait::async_trait;
 use awc::Client as HttpClient;
-use log::{error, info};
+use log::{error, info, warn};
 use sea_orm::DatabaseConnection;
 
 use crate::errors::AppResult;
@@ -37,10 +37,13 @@ where
     /// # Arguments:
     /// * `db` - The pool of connections to the DB
     /// * `reference` - The reference to the data that is to be retrieved
+    /// * `fresh` - Whether a "fresh" cache entry is required, i.e. whether "stale" entries are to
+    ///             be ignored
     async fn get_cached_data(
         &self,
         db: &Option<DatabaseConnection>,
         reference: &Ref,
+        fresh: bool,
     ) -> AppResult<Option<Data>>;
 
     /// Cache data into the database.
@@ -95,7 +98,7 @@ where
         http_client: &HttpClient,
         reference: &Ref,
     ) -> AppResult<Data> {
-        match self.get_cached_data(db, reference).await {
+        match self.get_cached_data(db, reference, true).await {
             Ok(None) => {}
             Ok(Some(data)) => {
                 info!("Successful retrieval from cache");
@@ -108,7 +111,30 @@ where
         }
 
         info!("Couldn't fetch data from cache; trying to scrape");
-        let data = self.scrape_data(http_client, reference).await?;
+        let data = match self.scrape_data(http_client, reference).await {
+            Ok(data) => data,
+            Err(err) => {
+                // Scraping failed for some reason, so see if a "stale" cache entry is available.
+                error!("Scraping failed with error: {}", err);
+                return match self.get_cached_data(db, reference, false).await {
+                    // No cache entry exists, so raise the scraping error.
+                    Ok(None) => Err(err),
+
+                    // Found a "stale" cache entry
+                    Ok(Some(data)) => {
+                        warn!(
+                            "Returning stale cache entry for scraper {}",
+                            std::any::type_name::<Self>()
+                        );
+                        Ok(data)
+                    }
+
+                    // Cache retrieval itself failed, so return this error, since the scraping
+                    // error has already been logged.
+                    Err(err) => Err(err),
+                };
+            }
+        };
         info!("Scraped data from source");
 
         self.safely_cache_data(db, data.borrow(), reference).await;

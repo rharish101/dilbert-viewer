@@ -72,20 +72,23 @@ impl LatestDateScraper {
 impl Scraper<String, str, ()> for LatestDateScraper {
     /// Get the cached latest date from the database.
     ///
-    /// If the latest date entry is stale (i.e. it was updated a long time back), or it wasn't
-    /// found in the cache, None is returned.
+    /// If the latest date entry is stale (i.e. it was updated a long time back) and a fresh entry
+    /// is requested, or it wasn't found in the cache, None is returned.
     async fn get_cached_data(
         &self,
         db: &Option<DatabaseConnection>,
         _reference: &(),
+        fresh: bool,
     ) -> AppResult<Option<String>> {
-        // Get the latest date if it has been updated within the last `LATEST_DATE_REFRESH` hours
-        let last_fresh_time = curr_datetime() - Duration::hours(LATEST_DATE_REFRESH);
         let row = if let Some(db) = db {
-            LatestDate::find()
-                .filter(latest_date::Column::LastCheck.gte(last_fresh_time))
-                .one(db)
-                .await?
+            let mut query = LatestDate::find();
+            if fresh {
+                // The latest date is fresh if it has been updated within the last
+                // `LATEST_DATE_REFRESH` hours.
+                let last_fresh_time = curr_datetime() - Duration::hours(LATEST_DATE_REFRESH);
+                query = query.filter(latest_date::Column::LastCheck.gte(last_fresh_time));
+            };
+            query.one(db).await?
         } else {
             return Ok(None);
         };
