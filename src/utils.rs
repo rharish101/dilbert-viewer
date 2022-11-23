@@ -34,7 +34,7 @@ pub fn curr_datetime() -> NaiveDateTime {
 /// Convert the date string (assumed in UTC) to a `chrono::NaiveDate` struct.
 ///
 /// # Arguments
-/// * `date_str` - The input date
+/// * `date` - The input date
 /// * `fmt` - The format of the input date
 pub fn str_to_date(date: &str, fmt: &str) -> ParseResult<NaiveDate> {
     NaiveDate::parse_from_str(date, fmt)
