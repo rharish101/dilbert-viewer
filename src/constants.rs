@@ -66,3 +66,8 @@ pub const REPO_URL: &str = "https://github.com/rharish101/dilbert-viewer";
 pub const STATIC_URL: &str = "/";
 /// Location of static files
 pub const STATIC_DIR: &str = "static/";
+/// Content security policy
+pub const CSP: &str = "\
+    default-src 'none';\
+    img-src 'self' assets.amuniversal.com;\
+    style-src 'self' cdn.jsdelivr.net";

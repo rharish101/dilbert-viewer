@@ -33,7 +33,7 @@ use actix_files::Files;
 use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     get,
-    middleware::{Compress, Logger},
+    middleware::{Compress, DefaultHeaders, Logger},
     web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
 use chrono::Duration as DateDuration;
@@ -44,7 +44,7 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
 
 use crate::app::Viewer;
 use crate::constants::{
-    DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, SRC_DATE_FMT, STATIC_DIR, STATIC_URL,
+    CSP, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, SRC_DATE_FMT, STATIC_DIR, STATIC_URL,
 };
 use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
@@ -156,10 +156,12 @@ async fn main() -> IOResult<()> {
         let viewer = Viewer::new(db_pool.clone(), insert_comic_lock.clone());
         let static_service =
             Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
+        let default_headers = DefaultHeaders::new().add(("Content-Security-Policy", CSP));
 
         App::new()
             .app_data(web::Data::new(viewer))
             .wrap(Compress::default())
+            .wrap(default_headers)
             .wrap(Logger::default())
             .service(latest_comic)
             .service(comic_page)
