@@ -6,6 +6,6 @@ repos:
     - id: cargo-check
     - id: clippy
   - repo: https://github.com/DevinR528/cargo-sort
-    rev: v1.0.7
+    rev: v1.0.9
     hooks:
     - id: cargo-sort
