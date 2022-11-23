@@ -15,8 +15,6 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
-use std::borrow::Borrow;
-
 use async_trait::async_trait;
 use awc::Client as HttpClient;
 use log::{error, info, warn};
@@ -25,11 +23,7 @@ use sea_orm::DatabaseConnection;
 use crate::errors::AppResult;
 
 #[async_trait(?Send)]
-pub trait Scraper<Data, DataBorrowed: Sync + ?Sized, Ref: Sync + ?Sized>
-where
-    // This allows using &str instead of &String, when `Data` is String.
-    Data: Send + Sync + Borrow<DataBorrowed>,
-{
+pub trait Scraper<Data, Ref> {
     /// Retrieve cached data from the database.
     ///
     /// If data is not found in the cache, None should be returned.
@@ -55,7 +49,7 @@ where
     async fn cache_data(
         &self,
         db: &Option<DatabaseConnection>,
-        data: &DataBorrowed,
+        data: &Data,
         reference: &Ref,
     ) -> AppResult<()>;
 
@@ -77,7 +71,7 @@ where
     async fn safely_cache_data(
         &self,
         db: &Option<DatabaseConnection>,
-        data: &DataBorrowed,
+        data: &Data,
         reference: &Ref,
     ) {
         if let Err(err) = self.cache_data(db, data, reference).await {
@@ -90,8 +84,7 @@ where
     /// # Arguments
     /// * `db` - The pool of connections to the DB
     /// * `http_client` - The HTTP client for scraping from the source
-    /// * `reference` - The thing that uniquely identifies the data that is requested, i.e. a
-    ///                 reference to the requested data
+    /// * `reference` - The reference to the data that is to be retrieved
     async fn get_data(
         &self,
         db: &Option<DatabaseConnection>,
@@ -137,7 +130,7 @@ where
         };
         info!("Scraped data from source");
 
-        self.safely_cache_data(db, data.borrow(), reference).await;
+        self.safely_cache_data(db, &data, reference).await;
         info!("Cached scraped data");
 
         Ok(data)

@@ -86,10 +86,8 @@ impl Viewer {
 
     /// Serve the rendered HTML given scraped data.
     ///
-    /// Both input dates must be in the format used by "dilbert.com".
-    ///
     /// # Arguments
-    /// * `date` - The (possibly corrected) date of the comic
+    /// * `date` - The date of the comic
     /// * `comic_data` - The scraped comic data
     /// * `latest_comic` - The date of the latest comic
     fn serve_template(
@@ -109,9 +107,9 @@ impl Viewer {
 
         let webpage = ComicTemplate {
             data: comic_data,
-            date_disp: &comic_data.date.format(DISP_DATE_FMT).to_string(),
+            date_disp: &date.format(DISP_DATE_FMT).to_string(),
             date: &date.format(SRC_DATE_FMT).to_string(),
-            first_comic: &first_comic.format(SRC_DATE_FMT).to_string(),
+            first_comic: FIRST_COMIC,
             previous_comic,
             next_comic,
             disable_left_nav: date == first_comic,
@@ -128,15 +126,15 @@ impl Viewer {
     }
 
     /// Serve the requested comic, without handling errors.
-    async fn serve_comic_raw(&self, date: &str, show_latest: bool) -> AppResult<HttpResponse> {
+    async fn serve_comic_raw(&self, date: NaiveDate, show_latest: bool) -> AppResult<HttpResponse> {
         // Execute both in parallel, as they are independent of each other.
         let (comic_data_res, latest_comic_res) = futures::join!(
             self.comic_scraper
-                .get_comic_data(&self.db, &self.http_client, date),
+                .get_comic_data(&self.db, &self.http_client, &date),
             self.latest_date_scraper
                 .get_latest_date(&self.db, &self.http_client)
         );
-        let latest_comic = &latest_comic_res?;
+        let mut latest_comic = latest_comic_res?;
 
         let comic_data = if let Some(comic_data) = comic_data_res? {
             comic_data
@@ -150,7 +148,7 @@ impl Viewer {
                 );
                 let comic_data = self
                     .comic_scraper
-                    .get_comic_data(&self.db, &self.http_client, latest_comic)
+                    .get_comic_data(&self.db, &self.http_client, &latest_comic)
                     .await?;
                 if let Some(comic_data) = comic_data {
                     comic_data
@@ -162,24 +160,21 @@ impl Viewer {
                     ));
                 }
             } else {
-                return Self::serve_404_raw(Some(date));
+                return Self::serve_404_raw(Some(&date));
             }
         };
 
-        let date = comic_data.date;
-        let mut latest_comic_date = str_to_date(latest_comic, SRC_DATE_FMT)?;
-
         // The date of the latest comic is often retrieved from the cache. If there is a comic for
         // a date which is newer than the cached value, then there is a new "latest comic".
-        if latest_comic_date < date {
-            latest_comic_date = date;
+        if latest_comic < date {
+            latest_comic = date;
             // Cache the new value of the latest comic date
             self.latest_date_scraper
-                .update_latest_date(&self.db, &date.format(SRC_DATE_FMT).to_string())
+                .update_latest_date(&self.db, &date)
                 .await?;
         };
 
-        Self::serve_template(date, &comic_data, latest_comic_date)
+        Self::serve_template(date, &comic_data, latest_comic)
     }
 
     /// Serve the requested comic.
@@ -187,10 +182,10 @@ impl Viewer {
     /// If an error is raised, then a 500 internal server error response is returned.
     ///
     /// # Arguments
-    /// * `date` - The date of the requested comic, in the format used by "dilbert.com"
+    /// * `date` - The date of the requested comic
     /// * `show_latest` - If there is no comic found for this date, then whether to show the latest
     ///                   comic
-    pub async fn serve_comic(&self, date: &str, show_latest: bool) -> HttpResponse {
+    pub async fn serve_comic(&self, date: NaiveDate, show_latest: bool) -> HttpResponse {
         match self.serve_comic_raw(date, show_latest).await {
             Ok(response) => response,
             Err(err) => Self::serve_500(&err),
@@ -233,9 +228,10 @@ impl Viewer {
     }
 
     /// Serve a 404 not found response for invalid URLs, without handling errors.
-    fn serve_404_raw(date: Option<&str>) -> AppResult<HttpResponse> {
+    fn serve_404_raw(date: Option<&NaiveDate>) -> AppResult<HttpResponse> {
+        let date_str = date.map(|date| date.format(SRC_DATE_FMT).to_string());
         let webpage = NotFoundTemplate {
-            date,
+            date: date_str.as_deref(),
             repo_url: REPO_URL,
         }
         .render()?;
@@ -251,7 +247,7 @@ impl Viewer {
     /// # Arguments
     /// * `date` - The date of the requested comic, if available. This must be a valid date for
     ///            which a comic doesn't exist.
-    pub fn serve_404(date: Option<&str>) -> HttpResponse {
+    pub fn serve_404(date: Option<&NaiveDate>) -> HttpResponse {
         match Self::serve_404_raw(date) {
             Ok(response) => response,
             Err(err) => Self::serve_500(&err),

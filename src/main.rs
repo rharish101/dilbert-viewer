@@ -36,7 +36,7 @@ use actix_web::{
     middleware::{Compress, DefaultHeaders, Logger},
     web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
-use chrono::Duration as DateDuration;
+use chrono::{Duration as DateDuration, NaiveDate};
 use log::{error, info};
 use rand::{thread_rng, Rng};
 use sea_orm::{DatabaseConnection, SqlxPostgresConnector};
@@ -70,26 +70,23 @@ async fn get_db_pool() -> Result<DatabaseConnection, DbInitError> {
 async fn latest_comic(viewer: web::Data<Viewer>) -> impl Responder {
     // If there is no comic for this date yet, "dilbert.com" will redirect to the homepage. The
     // code can handle this by instead showing the contents of the latest comic.
-    let today = curr_date().format(SRC_DATE_FMT).to_string();
+    let today = curr_date();
 
     // If there is no comic for this date yet, we don't want to raise a 404, so just show the exact
     // latest date without a redirection (to preserve the URL and load faster).
-    viewer.serve_comic(&today, true).await
+    viewer.serve_comic(today, true).await
 }
 
 /// Serve the comic requested in the given URL.
 #[get("/{year}-{month}-{day}")]
-async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(u16, u16, u16)>) -> impl Responder {
+async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(i32, u32, u32)>) -> impl Responder {
     let (year, month, day) = path.into_inner();
 
-    // NOTE: This depends on the format given by `crate::constants::SRC_DATE_FMT`.
-    let date = format!("{:04}-{:02}-{:02}", year, month, day);
-
     // Check to see if the date is invalid.
-    if str_to_date(&date, SRC_DATE_FMT).is_err() {
-        Viewer::serve_404(None)
+    if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
+        viewer.serve_comic(date, false).await
     } else {
-        viewer.serve_comic(&date, false).await
+        Viewer::serve_404(None)
     }
 }
 

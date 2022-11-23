@@ -34,7 +34,6 @@ use crate::constants::{CACHE_LIMIT, SRC_DATE_FMT, SRC_PREFIX};
 use crate::entities::{comic_cache, prelude::ComicCache};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
-use crate::utils::str_to_date;
 
 // Raw SQL statement to get the approximate rows.
 // This is an approximate of the no. of rows in the `comic_cache` table. This is much faster than
@@ -48,9 +47,6 @@ struct ApproxRows {
 }
 
 pub struct ComicData {
-    /// The date of the comic
-    pub date: NaiveDate,
-
     /// The URL to the comic image
     pub img_url: String,
 
@@ -66,8 +62,7 @@ pub struct ComicData {
 
 /// Struct for a comic scraper
 ///
-/// This scraper takes a date (in the format used by "dilbert.com") as input.
-/// It returns the info about the comic.
+/// This scraper takes a date as input and returns the info about the comic.
 pub struct ComicScraper {
     // We want to guard a section of code, not an item, so use `()`.
     insert_comic_lock: Arc<Mutex<()>>,
@@ -153,7 +148,7 @@ impl ComicScraper {
         &self,
         db: &Option<DatabaseConnection>,
         http_client: &HttpClient,
-        date: &str,
+        date: &NaiveDate,
     ) -> AppResult<Option<ComicData>> {
         match self.get_data(db, http_client, date).await {
             Ok(comic_data) => Ok(Some(comic_data)),
@@ -164,17 +159,17 @@ impl ComicScraper {
 }
 
 #[async_trait(?Send)]
-impl Scraper<ComicData, ComicData, str> for ComicScraper {
+impl Scraper<ComicData, NaiveDate> for ComicScraper {
     /// Get the cached comic data from the database.
     ///
     /// If the comic date entry isn't in the cache, None is returned.
     async fn get_cached_data(
         &self,
         db: &Option<DatabaseConnection>,
-        date: &str,
+        date: &NaiveDate,
         _fresh: bool,
     ) -> AppResult<Option<ComicData>> {
-        let date = str_to_date(date, SRC_DATE_FMT)?;
+        let date = date.to_owned();
         let row = if let Some(db) = db {
             ComicCache::find_by_id(date).one(db).await?
         } else {
@@ -195,7 +190,6 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         // from the cache, as we aren't caching the mapping of incorrect:correct dates. `last_used`
         // will be updated later.
         let comic_data = ComicData {
-            date,
             img_url: row.img_url,
             title: row.title,
             img_width: row.img_width,
@@ -214,7 +208,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         &self,
         db: &Option<DatabaseConnection>,
         comic_data: &ComicData,
-        _date: &str,
+        date: &NaiveDate,
     ) -> AppResult<()> {
         let db_conn = if let Some(db) = db {
             db
@@ -241,7 +235,7 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         }
 
         let row = comic_cache::ActiveModel {
-            comic: Set(comic_data.date),
+            comic: Set(date.to_owned()),
             img_url: Set(comic_data.img_url.clone()),
             title: Set(comic_data.title.clone()),
             img_width: Set(comic_data.img_width),
@@ -260,8 +254,12 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
     }
 
     /// Scrape the comic data of the requested date from the source.
-    async fn scrape_data(&self, http_client: &HttpClient, date: &str) -> AppResult<ComicData> {
-        let url = String::from(SRC_PREFIX) + date;
+    async fn scrape_data(
+        &self,
+        http_client: &HttpClient,
+        date: &NaiveDate,
+    ) -> AppResult<ComicData> {
+        let url = format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT));
         let mut resp = http_client.get(url).send().await?;
         let status = resp.status();
 
@@ -349,7 +347,6 @@ impl Scraper<ComicData, ComicData, str> for ComicScraper {
         };
 
         Ok(ComicData {
-            date: str_to_date(date, SRC_DATE_FMT)?,
             img_url,
             title,
             img_width,
