@@ -15,20 +15,27 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
-use std::cmp::Ordering;
-
 use async_trait::async_trait;
 use awc::{http::StatusCode, Client as HttpClient};
-use chrono::{Duration, NaiveDate};
-use log::{error, info, warn};
-use sea_orm::{sea_query::Expr, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use chrono::{Duration, NaiveDate, NaiveDateTime};
+use deadpool_redis::{redis::AsyncCommands, Pool as RedisPool};
+use log::{debug, error, info};
+use serde::{Deserialize, Serialize};
 
 use crate::constants::{LATEST_DATE_REFRESH, SRC_DATE_FMT, SRC_PREFIX};
-use crate::entities::latest_date;
-use crate::entities::prelude::LatestDate;
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::{curr_date, curr_datetime};
+
+/// Key for storing the latest date in the DB
+const LATEST_DATE_KEY: &str = "latest-date";
+
+/// Values stored for the latest date
+#[derive(Deserialize, Serialize)]
+struct LatestDateInfo {
+    date: NaiveDate,
+    last_check: NaiveDateTime,
+}
 
 /// Struct to scrape the date of the latest Dilbert comic.
 ///
@@ -48,7 +55,7 @@ impl LatestDateScraper {
     /// * `http_client` - The HTTP client for scraping from "dilbert.com"
     pub async fn get_latest_date(
         &self,
-        db: &Option<DatabaseConnection>,
+        db: &Option<RedisPool>,
         http_client: &HttpClient,
     ) -> AppResult<NaiveDate> {
         self.get_data(db, http_client, &()).await
@@ -61,7 +68,7 @@ impl LatestDateScraper {
     /// * `date` - The date of the latest comic
     pub async fn update_latest_date(
         &self,
-        db: &Option<DatabaseConnection>,
+        db: &Option<RedisPool>,
         date: &NaiveDate,
     ) -> AppResult<()> {
         self.cache_data(db, date, &()).await
@@ -72,79 +79,58 @@ impl LatestDateScraper {
 impl Scraper<NaiveDate, ()> for LatestDateScraper {
     /// Get the cached latest date from the database.
     ///
-    /// If the latest date entry is stale (i.e. it was updated a long time back) and a fresh entry
-    /// is requested, or it wasn't found in the cache, None is returned.
+    /// In the rare case that the latest date entry wasn't found in the cache, None is returned.
+    /// The boolean return flag indicates whether the cache entry is stale (i.e. it was updated a
+    /// long time back) or not.
     async fn get_cached_data(
         &self,
-        db: &Option<DatabaseConnection>,
+        db: &Option<RedisPool>,
         _reference: &(),
-        fresh: bool,
-    ) -> AppResult<Option<NaiveDate>> {
-        let row = if let Some(db) = db {
-            let mut query = LatestDate::find();
-            if fresh {
-                // The latest date is fresh if it has been updated within the last
-                // `LATEST_DATE_REFRESH` hours.
-                let last_fresh_time = curr_datetime() - Duration::hours(LATEST_DATE_REFRESH);
-                query = query.filter(latest_date::Column::LastCheck.gte(last_fresh_time));
-            };
-            query.one(db).await?
+    ) -> AppResult<Option<(NaiveDate, bool)>> {
+        let mut conn = if let Some(db) = db {
+            db.get().await?
         } else {
             return Ok(None);
         };
 
-        if let Some(row) = row {
-            Ok(Some(row.latest))
+        // Heroku enforces an upper limit on the DB memory, and we manually set it to evict the
+        // least recently used keys. Thus, since it's possible that this key has been evicted, we
+        // use an `Option` for `raw_data`.
+        let raw_data: Option<Vec<u8>> = conn.get(LATEST_DATE_KEY).await?;
+        debug!("Retrieved raw data from DB for latest date");
+
+        Ok(if let Some(raw_data) = raw_data {
+            let info: LatestDateInfo = serde_json::from_slice(raw_data.as_slice())?;
+            // The latest date is fresh if it has been updated within the last
+            // `LATEST_DATE_REFRESH` hours.
+            let last_fresh_time = curr_datetime() - Duration::hours(LATEST_DATE_REFRESH);
+            Some((info.date, info.last_check >= last_fresh_time))
         } else {
-            Ok(None)
-        }
+            None
+        })
     }
 
     /// Cache the latest date into the database.
     async fn cache_data(
         &self,
-        db: &Option<DatabaseConnection>,
+        db: &Option<RedisPool>,
         date: &NaiveDate,
         _reference: &(),
     ) -> AppResult<()> {
-        let date = date.to_owned();
-        let db = if let Some(db) = db {
-            db
+        let mut conn = if let Some(db) = db {
+            db.get().await?
         } else {
             return Ok(());
         };
 
-        // The WHERE condition is not required as there is always only one row in the `latest_date` table.
-        // Hence, simply use `update_many`.
-        let update_result = LatestDate::update_many()
-            .col_expr(latest_date::Column::Latest, Expr::value(date))
-            .col_expr(latest_date::Column::LastCheck, Expr::cust("DEFAULT"))
-            .exec(db)
+        let new_info = LatestDateInfo {
+            date: date.to_owned(),
+            last_check: curr_datetime(),
+        };
+        conn.set(LATEST_DATE_KEY, serde_json::to_vec(&new_info)?)
             .await?;
 
-        match update_result.rows_affected.cmp(&1) {
-            Ordering::Greater => {
-                return Err(AppError::Internal(
-                    "The \"latest_date\" table has more than one row, i.e. this table is corrupt"
-                        .into(),
-                ));
-            }
-            Ordering::Less => (),
-            Ordering::Equal => {
-                info!("Successfully updated latest date in cache");
-                return Ok(());
-            }
-        }
-
-        // No rows were updated, so the "latest_date" table must be empty. This should only happen
-        // if this table was cleared manually, or this is the first run of this code on this
-        // database.
-        warn!("Couldn't update latest date in cache, presumably because it was missing. This should only happen on the first run. Trying to insert it now.");
-        let row = latest_date::ActiveModel {
-            latest: Set(date),
-            ..Default::default()
-        };
-        LatestDate::insert(row).exec(db).await?;
+        info!("Successfully updated latest date in cache");
         Ok(())
     }
 

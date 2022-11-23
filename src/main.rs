@@ -17,7 +17,6 @@
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 mod app;
 mod constants;
-mod entities;
 mod errors;
 mod scrapers;
 mod templates;
@@ -37,10 +36,9 @@ use actix_web::{
     web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
 use chrono::{Duration as DateDuration, NaiveDate};
+use deadpool_redis::{Config as RedisConfig, Pool as RedisPool, Runtime};
 use log::{error, info};
 use rand::{thread_rng, Rng};
-use sea_orm::{DatabaseConnection, SqlxPostgresConnector};
-use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
 
 use crate::app::Viewer;
 use crate::constants::{
@@ -50,19 +48,16 @@ use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
 
 /// Initialize the database connection pool for caching data.
-async fn get_db_pool() -> Result<DatabaseConnection, DbInitError> {
-    // Heroku needs SSL for its PostgreSQL DB, but uses a self-signed certificate. So simply
-    // disable verification while keeping SSL.
-    let connect_opts = PgConnectOptions::from_str(env::var("DATABASE_URL")?.as_str())?
-        .ssl_mode(PgSslMode::Require);
-
-    let pool_opts = PgPoolOptions::new()
-        .acquire_timeout(TimeDuration::from_secs(DB_TIMEOUT))
-        .max_connections(MAX_DB_CONN);
-
-    Ok(SqlxPostgresConnector::from_sqlx_postgres_pool(
-        pool_opts.connect_with(connect_opts).await?,
-    ))
+async fn get_db_pool() -> Result<RedisPool, DbInitError> {
+    // Heroku needs SSL for its Redis addon, but uses a self-signed certificate. So simply disable
+    // verification while keeping SSL.
+    let config = RedisConfig::from_url(env::var("REDIS_TLS_URL")? + "#insecure");
+    let pool_builder = config
+        .builder()?
+        .runtime(Runtime::Tokio1)
+        .max_size(MAX_DB_CONN)
+        .wait_timeout(Some(TimeDuration::from_secs(DB_TIMEOUT)));
+    Ok(pool_builder.build()?)
 }
 
 /// Serve the latest comic.
@@ -146,11 +141,10 @@ async fn main() -> IOResult<()> {
             None
         }
     };
-    let insert_comic_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
 
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here
-        let viewer = Viewer::new(db_pool.clone(), insert_comic_lock.clone());
+        let viewer = Viewer::new(db_pool.clone());
         let static_service =
             Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
         let default_headers = DefaultHeaders::new().add(("Content-Security-Policy", CSP));

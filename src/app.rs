@@ -16,16 +16,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use std::cmp::{max, min};
-use std::sync::Arc;
 use std::time::Duration as TimeDuration;
 
 use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
 use awc::Client as HttpClient;
 use chrono::{Duration as DateDuration, NaiveDate};
+use deadpool_redis::Pool as RedisPool;
 use log::{debug, error, info};
-use sea_orm::DatabaseConnection;
-use tokio::sync::Mutex;
 
 use crate::constants::{
     APP_URL, DISP_DATE_FMT, FIRST_COMIC, REPO_URL, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX,
@@ -37,7 +35,7 @@ use crate::utils::str_to_date;
 
 pub struct Viewer {
     /// The pool of connections to the database
-    db: Option<DatabaseConnection>,
+    db: Option<RedisPool>,
     /// The HTTP client for connecting to the server
     http_client: HttpClient,
 
@@ -58,11 +56,11 @@ fn get_http_client() -> HttpClient {
 
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db: Option<DatabaseConnection>, insert_comic_lock: Arc<Mutex<()>>) -> Self {
+    pub fn new(db: Option<RedisPool>) -> Self {
         Self {
             db,
             http_client: get_http_client(),
-            comic_scraper: ComicScraper::new(insert_comic_lock),
+            comic_scraper: ComicScraper::new(),
             latest_date_scraper: LatestDateScraper::new(),
         }
     }

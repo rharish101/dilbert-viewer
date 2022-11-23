@@ -18,8 +18,8 @@
 use std::env;
 
 use awc::error::{PayloadError, SendRequestError};
+use deadpool_redis::{redis::RedisError, BuildError, ConfigError, PoolError};
 use minify_html::Error as MinifyHtmlError;
-use sqlx::Error as SqlError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -28,9 +28,12 @@ pub enum DbInitError {
     /// Error reading the DB URL from the environment
     #[error("Missing environment variable for the database URL: {0}")]
     Env(#[from] env::VarError),
-    /// Error initializing the DB connection
-    #[error("Error initializing the database connection: {0}")]
-    Db(#[from] SqlError),
+    /// Invalid Redis URL
+    #[error("Error in the Redis URL: {0}")]
+    Config(#[from] ConfigError),
+    /// Error initializing the DB pool
+    #[error("Error initializing the database pool: {0}")]
+    Build(#[from] BuildError),
 }
 
 #[derive(Error, Debug)]
@@ -62,12 +65,15 @@ impl From<MinifyHtmlError> for MinificationError {
 #[derive(Error, Debug)]
 /// All errors raised by the viewer app
 pub enum AppError {
+    /// Errors when acquiring a connection from the DB pool
+    #[error("Error acquiring DB connection: {0}")]
+    Pool(#[from] PoolError),
     /// Errors when executing a DB query
     #[error("Database error: {0}")]
-    Db(#[from] sea_orm::DbErr),
-    /// Errors in initializing the DB
-    #[error("Error initializing the database: {0}")]
-    DbInit(#[from] DbInitError),
+    Db(#[from] RedisError),
+    /// Errors when serializing/deserializing a DB query argument/result
+    #[error("(De)serialization error: {0}")]
+    Serde(#[from] serde_json::Error),
     /// Errors when building an HTTP client, or when making HTTP requests
     #[error("HTTP client error: {0}")]
     Http(HttpError),

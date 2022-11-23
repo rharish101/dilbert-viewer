@@ -1,21 +1,22 @@
 # Dilbert Viewer
 
 A simple comic viewer for Dilbert by Scott Adams, hosted on Heroku [here](https://dilbert-viewer.herokuapp.com).
-It uses the third-party [Rust Buildpack](https://elements.heroku.com/buildpacks/emk/heroku-buildpack-rust) with the [Heroku PostgreSQL add-on](https://elements.heroku.com/addons/heroku-postgresql) for caching.
+It uses the third-party [Rust Buildpack](https://elements.heroku.com/buildpacks/emk/heroku-buildpack-rust) with the [Heroku Redis add-on](https://elements.heroku.com/addons/heroku-redis) for caching.
 
-## Instructions
-Run the script `cache_init.sql` at the beginning to create the required tables in the cache:
-```sh
-heroku pg:psql -a app-name -f cache_init.sql
-```
-Here, `app-name` is the name of your Heroku app that has a PostgreSQL database configured.
-
-### Local Testing
-#### Setup
+## Local Testing
+### Setup
 The [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli) is used to locally run the code as specified in the [Procfile](./Procfile).
 To install the Heroku CLI, please refer to [Heroku's installation guide](https://devcenter.heroku.com/articles/heroku-cli#download-and-install) for recommended installation options.
 
-#### Running
+#### Recommendation:
+If you have a memory limit on your Redis database (like Heroku does), configure Redis to evict keys using the `allkeys-lru` policy.
+To configure this with Heroku's Redis addon, run the following:
+```sh
+heroku redis:maxmemory -a app-name --policy allkeys-lru
+```
+Here, `app-name` is the name of your Heroku app that has a Redis database configured.
+
+### Running
 1. Build the project in release mode:
     ```sh
     cargo build --release
@@ -23,16 +24,16 @@ To install the Heroku CLI, please refer to [Heroku's installation guide](https:/
 
 2. Set the required environment variables and run the viewer locally with the Heroku CLI:
     ```sh
-    DATABASE_URL=$(heroku config:get DATABASE_URL -a app-name) heroku local web
+    REDIS_TLS_URL=$(heroku config:get REDIS_TLS_URL -a app-name) heroku local web
     ```
-    Here, `app-name` is the name of your Heroku app that has a PostgreSQL database configured.
+    Here, `app-name` is the name of your Heroku app that has a Redis database configured.
     
-    If you want to run the viewer without a PostgreSQL database, then simply run it without the environment variable:
+    If you want to run the viewer without a Redis database, then simply run it without the environment variable:
     ```sh
     heroku local web
     ```
 
-### For Contributing
+## Contributing
 [pre-commit](https://pre-commit.com/) is used for managing hooks that run before each commit, to ensure code quality and run some basic tests.
 Thus, this needs to be set up only when one intends to commit changes to git.
 

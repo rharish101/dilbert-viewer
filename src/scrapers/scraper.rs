@@ -17,8 +17,8 @@
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use async_trait::async_trait;
 use awc::Client as HttpClient;
+use deadpool_redis::Pool as RedisPool;
 use log::{error, info, warn};
-use sea_orm::DatabaseConnection;
 
 use crate::errors::AppResult;
 
@@ -26,19 +26,18 @@ use crate::errors::AppResult;
 pub trait Scraper<Data, Ref> {
     /// Retrieve cached data from the database.
     ///
-    /// If data is not found in the cache, None should be returned.
+    /// If data is not found in the cache, None should be returned. Otherwise, this returns the
+    /// cached data, and a boolean indicating whether the entry is "fresh" (doesn't need to be
+    /// updated) or not.
     ///
     /// # Arguments:
     /// * `db` - The pool of connections to the DB
     /// * `reference` - The reference to the data that is to be retrieved
-    /// * `fresh` - Whether a "fresh" cache entry is required, i.e. whether "stale" entries are to
-    ///             be ignored
     async fn get_cached_data(
         &self,
-        db: &Option<DatabaseConnection>,
+        db: &Option<RedisPool>,
         reference: &Ref,
-        fresh: bool,
-    ) -> AppResult<Option<Data>>;
+    ) -> AppResult<Option<(Data, bool)>>;
 
     /// Cache data into the database.
     ///
@@ -48,7 +47,7 @@ pub trait Scraper<Data, Ref> {
     /// * `reference` - The reference to the data that is to be retrieved
     async fn cache_data(
         &self,
-        db: &Option<DatabaseConnection>,
+        db: &Option<RedisPool>,
         data: &Data,
         reference: &Ref,
     ) -> AppResult<()>;
@@ -68,12 +67,7 @@ pub trait Scraper<Data, Ref> {
     /// * `db` - The pool of connections to the DB
     /// * `data` - The data that is to be cached
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn safely_cache_data(
-        &self,
-        db: &Option<DatabaseConnection>,
-        data: &Data,
-        reference: &Ref,
-    ) {
+    async fn safely_cache_data(&self, db: &Option<RedisPool>, data: &Data, reference: &Ref) {
         if let Err(err) = self.cache_data(db, data, reference).await {
             error!("{:?}", err);
         }
@@ -87,52 +81,50 @@ pub trait Scraper<Data, Ref> {
     /// * `reference` - The reference to the data that is to be retrieved
     async fn get_data(
         &self,
-        db: &Option<DatabaseConnection>,
+        db: &Option<RedisPool>,
         http_client: &HttpClient,
         reference: &Ref,
     ) -> AppResult<Data> {
-        match self.get_cached_data(db, reference, true).await {
-            Ok(None) => {}
-            Ok(Some(data)) => {
+        let stale_data = match self.get_cached_data(db, reference).await {
+            Ok(Some((data, true))) => {
                 info!("Successful retrieval from cache");
                 return Ok(data);
             }
+            Ok(Some((data, false))) => Some(data),
+            Ok(None) => None,
             Err(err) => {
                 // Better to re-scrape now than crash unexpectedly, so simply log the error.
                 error!("Error retrieving from cache: {}", err);
-            }
-        }
-
-        info!("Couldn't fetch data from cache; trying to scrape");
-        let data = match self.scrape_data(http_client, reference).await {
-            Ok(data) => data,
-            Err(err) => {
-                // Scraping failed for some reason, so see if a "stale" cache entry is available.
-                error!("Scraping failed with error: {}", err);
-                return match self.get_cached_data(db, reference, false).await {
-                    // No cache entry exists, so raise the scraping error.
-                    Ok(None) => Err(err),
-
-                    // Found a "stale" cache entry
-                    Ok(Some(data)) => {
-                        warn!(
-                            "Returning stale cache entry for scraper {}",
-                            std::any::type_name::<Self>()
-                        );
-                        Ok(data)
-                    }
-
-                    // Cache retrieval itself failed, so return this error, since the scraping
-                    // error has already been logged.
-                    Err(err) => Err(err),
-                };
+                None
             }
         };
-        info!("Scraped data from source");
 
-        self.safely_cache_data(db, &data, reference).await;
-        info!("Cached scraped data");
+        info!("Couldn't fetch fresh data from cache; trying to scrape");
+        let err = match self.scrape_data(http_client, reference).await {
+            Ok(data) => {
+                info!("Scraped data from source");
+                self.safely_cache_data(db, &data, reference).await;
+                info!("Cached scraped data");
+                return Ok(data);
+            }
+            Err(err) => err,
+        };
 
-        Ok(data)
+        // Scraping failed for some reason, so use the "stale" cache entry, if available.
+        error!("Scraping failed with error: {}", err);
+
+        return match stale_data {
+            // No stale cache entry exists, so raise the scraping error.
+            None => Err(err),
+
+            // Return the "stale" cache entry
+            Some(data) => {
+                warn!(
+                    "Returning stale cache entry for scraper {}",
+                    std::any::type_name::<Self>()
+                );
+                Ok(data)
+            }
+        };
     }
 }
