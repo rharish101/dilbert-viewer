@@ -33,7 +33,7 @@ use actix_files::Files;
 use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     get,
-    middleware::Compress,
+    middleware::{Compress, Logger},
     web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
 use chrono::Duration as DateDuration;
@@ -160,6 +160,7 @@ async fn main() -> IOResult<()> {
         App::new()
             .app_data(web::Data::new(viewer))
             .wrap(Compress::default())
+            .wrap(Logger::default())
             .service(latest_comic)
             .service(comic_page)
             .service(random_comic)
