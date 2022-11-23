@@ -99,7 +99,7 @@ pub trait Scraper<Data, Ref> {
             }
             Err(err) => {
                 // Better to re-scrape now than crash unexpectedly, so simply log the error.
-                error!("{}", err);
+                error!("Error retrieving from cache: {}", err);
             }
         }
 
