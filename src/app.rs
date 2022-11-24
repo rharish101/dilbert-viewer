@@ -134,8 +134,8 @@ impl Viewer {
         );
         let mut latest_comic = latest_comic_res?;
 
-        let comic_data = if let Some(comic_data) = comic_data_res? {
-            comic_data
+        let (comic_data, date) = if let Some(comic_data) = comic_data_res? {
+            (comic_data, date)
         } else {
             // The data is None if the input is invalid (i.e. "dilbert.com" has redirected to the
             // homepage).
@@ -149,7 +149,7 @@ impl Viewer {
                     .get_comic_data(&self.db, &self.http_client, &latest_comic)
                     .await?;
                 if let Some(comic_data) = comic_data {
-                    comic_data
+                    (comic_data, latest_comic)
                 } else {
                     // This means that the "latest date", either from the DB or by scraping,
                     // doesn't have a comic. This should NEVER happen.
