@@ -32,3 +32,6 @@ tokio = { version = "1.15.0", features = ["fs"] }
 
 [profile.release]
 lto = true
+
+[dev-dependencies]
+test-case = "2.2.2"
