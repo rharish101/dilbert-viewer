@@ -33,6 +33,12 @@ Here, `app-name` is the name of your Heroku app that has a Redis database config
     heroku local web
     ```
 
+### Testing
+Run tests as follows:
+```sh
+cargo test
+```
+
 ## Contributing
 [pre-commit](https://pre-commit.com/) is used for managing hooks that run before each commit, to ensure code quality and run some basic tests.
 Thus, this needs to be set up only when one intends to commit changes to git.
