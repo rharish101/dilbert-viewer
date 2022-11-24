@@ -9,7 +9,7 @@ The [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli) is used to lo
 To install the Heroku CLI, please refer to [Heroku's installation guide](https://devcenter.heroku.com/articles/heroku-cli#download-and-install) for recommended installation options.
 
 #### Recommendation:
-If you have a memory limit on your Redis database (like Heroku does), configure Redis to evict keys using the `allkeys-lru` policy.
+If you have a memory limit on your Redis database (like Heroku does), configure Redis to evict keys using the [`allkeys-lru` policy](https://redis.io/docs/reference/eviction/).
 To configure this with Heroku's Redis addon, run the following:
 ```sh
 heroku redis:maxmemory -a app-name --policy allkeys-lru
