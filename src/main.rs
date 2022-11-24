@@ -126,7 +126,7 @@ async fn main() -> IOResult<()> {
 
     let host = format!(
         "0.0.0.0:{}",
-        env::var("PORT").unwrap_or_else(|_| String::from(PORT))
+        env::var("PORT").unwrap_or_else(|_| PORT.to_string())
     );
     info!("Starting server at {}", host);
 

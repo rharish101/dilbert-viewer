@@ -50,7 +50,7 @@ pub const LATEST_DATE_REFRESH: i64 = 2;
 pub const SRC_PREFIX: &str = "https://dilbert.com/strip/";
 /// Default port when one isn't specified
 // This is Heroku's default port when running locally
-pub const PORT: &str = "5000";
+pub const PORT: u16 = 5000;
 /// Link to the public version of this app
 // Used in the OpenGraph tags
 pub const APP_URL: &str = "https://dilbert-viewer.herokuapp.com/";
