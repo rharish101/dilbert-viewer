@@ -130,7 +130,7 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
         conn.set(LATEST_DATE_KEY, serde_json::to_vec(&new_info)?)
             .await?;
 
-        info!("Successfully updated latest date in cache");
+        info!("Successfully updated latest date in cache to: {}", date);
         Ok(())
     }
 

@@ -69,7 +69,7 @@ pub trait Scraper<Data, Ref> {
     /// * `reference` - The reference to the data that is to be retrieved
     async fn safely_cache_data(&self, db: &Option<RedisPool>, data: &Data, reference: &Ref) {
         if let Err(err) = self.cache_data(db, data, reference).await {
-            error!("{:?}", err);
+            error!("Error caching data: {}", err);
         }
     }
 
