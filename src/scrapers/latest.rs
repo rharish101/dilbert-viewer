@@ -18,14 +18,14 @@
 use async_trait::async_trait;
 use awc::{http::StatusCode, Client as HttpClient};
 use chrono::{Duration, NaiveDate, NaiveDateTime};
-use deadpool_redis::{redis::AsyncCommands, Pool as RedisPool};
+use deadpool_redis::Pool as RedisPool;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{LATEST_DATE_REFRESH, SRC_DATE_FMT, SRC_PREFIX};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
-use crate::utils::{curr_date, curr_datetime};
+use crate::utils::{curr_date, curr_datetime, SerdeAsyncCommands};
 
 /// Key for storing the latest date in the DB
 const LATEST_DATE_KEY: &str = "latest-date";
@@ -96,11 +96,10 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
         // Heroku enforces an upper limit on the DB memory, and we manually set it to evict the
         // least recently used keys. Thus, since it's possible that this key has been evicted, we
         // use an `Option` for `raw_data`.
-        let raw_data: Option<Vec<u8>> = conn.get(LATEST_DATE_KEY).await?;
-        debug!("Retrieved raw data from DB for latest date");
+        let info: Option<LatestDateInfo> = conn.get(LATEST_DATE_KEY).await?;
 
-        Ok(if let Some(raw_data) = raw_data {
-            let info: LatestDateInfo = serde_json::from_slice(raw_data.as_slice())?;
+        Ok(if let Some(info) = info {
+            debug!("Retrieved info from DB for latest date");
             // The latest date is fresh if it has been updated within the last
             // `LATEST_DATE_REFRESH` hours.
             let last_fresh_time = curr_datetime() - Duration::hours(LATEST_DATE_REFRESH);
@@ -127,8 +126,7 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
             date: date.to_owned(),
             last_check: curr_datetime(),
         };
-        conn.set(LATEST_DATE_KEY, serde_json::to_vec(&new_info)?)
-            .await?;
+        conn.set(LATEST_DATE_KEY, &new_info).await?;
 
         info!("Successfully updated latest date in cache to: {}", date);
         Ok(())

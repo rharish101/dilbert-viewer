@@ -18,15 +18,16 @@
 use async_trait::async_trait;
 use awc::{http::StatusCode, Client as HttpClient};
 use chrono::NaiveDate;
-use deadpool_redis::{redis::AsyncCommands, Pool as RedisPool};
+use deadpool_redis::Pool as RedisPool;
 use html_escape::decode_html_entities;
-use log::{debug, error, info};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 
 use crate::constants::{SRC_DATE_FMT, SRC_PREFIX};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
+use crate::utils::SerdeAsyncCommands;
 
 #[derive(Deserialize, Serialize)]
 pub struct ComicData {
@@ -90,17 +91,10 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
             return Ok(None);
         };
 
-        let raw_data: Option<Vec<u8>> = conn.get(serde_json::to_vec(date)?).await?;
-        debug!("Retrieved raw data from DB for date: {}", date);
-
-        Ok(if let Some(raw_data) = raw_data {
-            let comic_data: ComicData = serde_json::from_slice(raw_data.as_slice())?;
-            Some((comic_data, true))
-        } else {
-            // This means that the comic for this date wasn't cached, or the date is invalid (i.e.
-            // it would redirect to the homepage).
-            None
-        })
+        // None would mean that the comic for this date wasn't cached, or the date is invalid (i.e.
+        // it would redirect to the homepage).
+        let comic_data: Option<ComicData> = conn.get(date).await?;
+        Ok(comic_data.map(|comic_data| (comic_data, true)))
     }
 
     /// Cache the comic data into the database.
@@ -116,9 +110,7 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
             return Ok(());
         };
 
-        conn.set(serde_json::to_vec(date)?, serde_json::to_vec(comic_data)?)
-            .await?;
-
+        conn.set(date, comic_data).await?;
         info!("Successfully cached data for {} in cache", date);
         Ok(())
     }
