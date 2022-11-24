@@ -287,3 +287,34 @@ impl Viewer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::fs::read_to_string;
+
+    use test_case::test_case;
+
+    /// Path to the directory where test HTML files are stored
+    const HTML_TEST_CASE_PATH: &str = "testdata/html";
+
+    // NOTE: This does *NOT* check if the minified HTML is equivalent, only that it's parsable.
+    #[test_case("empty"; "empty HTML")]
+    #[test_case("simple"; "simple HTML")]
+    #[test_case("comic"; "comic HTML")]
+    #[test_case("minimized"; "already minimized HTML")]
+    /// Test whether HTML minification results in a parsable HTML.
+    ///
+    /// # Arguments
+    /// * `file_stem` - The filename stem of the HTML file to be used for testing
+    fn test_minified_html_is_parsable(file_stem: &str) {
+        let path = format!("{}/{}.html", HTML_TEST_CASE_PATH, file_stem);
+        let html =
+            read_to_string(&path).unwrap_or_else(|_| panic!("Couldn't read test case {}", &path));
+
+        let result = Viewer::minify_html(html).expect("Error minifying HTML");
+        // Only checks if the minified HTML is actually parsable.
+        tl::parse(&result, tl::ParserOptions::default()).expect("Cannot parse minified HTML");
+    }
+}
