@@ -34,4 +34,5 @@ tokio = { version = "1.15.0", features = ["fs"] }
 lto = true
 
 [dev-dependencies]
+content-security-policy = "0.4.2"
 test-case = "2.2.2"
