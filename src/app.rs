@@ -296,7 +296,10 @@ mod tests {
 
     use actix_web::{
         body::MessageBody,
-        http::{header::CONTENT_TYPE, StatusCode},
+        http::{
+            header::{TryIntoHeaderValue, CONTENT_TYPE},
+            StatusCode,
+        },
     };
     use test_case::test_case;
 
@@ -320,6 +323,44 @@ mod tests {
         let result = Viewer::minify_html(html).expect("Error minifying HTML");
         // Only checks if the minified HTML is actually parsable.
         tl::parse(&result, tl::ParserOptions::default()).expect("Cannot parse minified HTML");
+    }
+
+    /// Test if an HTTP response is a valid HTML page
+    fn test_html_response(resp: HttpResponse) {
+        // Check the "Content-Type" header.
+        assert_eq!(
+            resp.headers().get(CONTENT_TYPE),
+            Some(&ContentType::html().try_into_value().unwrap()),
+            "Response content type is not HTML"
+        );
+
+        // Check if response body is valid UTF-8 and the HTML is parsable.
+        let body = resp
+            .into_body()
+            .try_into_bytes()
+            .expect("Could not read response body");
+        let body_utf8 = std::str::from_utf8(&body).expect("Response body not UTF-8");
+        tl::parse(body_utf8, tl::ParserOptions::default()).expect("Response body not valid HTML");
+    }
+
+    #[test_case(Some((2000, 1, 1)); "missing comic")]
+    #[test_case(None; "generic 404")]
+    /// Test rendering of the 404 not found page template.
+    ///
+    /// # Arguments
+    /// * `date_ymd` - A tuple containing the year, month and day of the missing comic, if any
+    fn test_404_page(date_ymd: Option<(i32, u32, u32)>) {
+        let date = date_ymd.map(|ymd| {
+            NaiveDate::from_ymd_opt(ymd.0, ymd.1, ymd.2).expect("Invalid test parameters")
+        });
+        let resp = Viewer::serve_404_raw(date.as_ref()).expect("Error generating 404 page");
+
+        assert_eq!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "Response is not status NOT FOUND"
+        );
+        test_html_response(resp);
     }
 
     #[test_case("static/styles.css", true; "app CSS")]
