@@ -363,6 +363,27 @@ mod tests {
         test_html_response(resp);
     }
 
+    #[test_case(""; "empty error msg")]
+    #[test_case("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+    incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation
+    ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit
+    in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat
+    cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+    "long error msg")]
+    /// Test rendering of the 500 internal server error page template.
+    ///
+    /// # Arguments
+    /// * `error_msg` - The error message to be displayed in the page
+    fn test_500_page(error_msg: &str) {
+        let resp = Viewer::serve_500(&AppError::Internal(error_msg.into()));
+        assert_eq!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Response is not status INTERNAL SERVER ERROR"
+        );
+        test_html_response(resp);
+    }
+
     #[test_case("static/styles.css", true; "app CSS")]
     #[test_case("styles.css", false; "missing file")]
     #[test_case("/", false; "invalid CSS path")]
