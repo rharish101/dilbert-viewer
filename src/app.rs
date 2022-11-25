@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use std::cmp::{max, min};
+use std::path::Path;
 use std::time::Duration as TimeDuration;
 
 use actix_web::{http::header::ContentType, HttpResponse};
@@ -190,28 +191,17 @@ impl Viewer {
         }
     }
 
-    /// Serve the requested CSS file with minification.
-    ///
-    /// If an error is raised, then a 500 internal server error response is returned.
-    ///
-    /// # Arguments
-    /// * `path` - The path to the CSS file
-    pub async fn serve_css(path: &std::path::Path) -> HttpResponse {
-        let css = if let Ok(text) = tokio::fs::read(path).await {
-            text
-        } else {
-            return Self::serve_404(None);
+    /// Serve the requested CSS file with minification, without handling errors.
+    async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
+        let css = match tokio::fs::read(path).await {
+            Ok(text) => text,
+            Err(err) => return Err(AppError::NotFound(err.to_string())),
         };
-        let css_str = match std::str::from_utf8(&css) {
-            Ok(css_str) => css_str,
-            Err(err) => return Self::serve_500(&AppError::Utf8(err)),
-        };
+        let css_str = std::str::from_utf8(&css)?;
 
         let minified = match minifier::css::minify(css_str) {
             Ok(minified) => minified.to_string(),
-            Err(err) => {
-                return Self::serve_500(&AppError::Minify(MinificationError::Css(err.into())))
-            }
+            Err(err) => return Err(MinificationError::Css(err.into()).into()),
         };
         debug!(
             "Minified \"{}\" from {} bytes to {}",
@@ -220,9 +210,23 @@ impl Viewer {
             minified.len()
         );
 
-        HttpResponse::Ok()
+        Ok(HttpResponse::Ok()
             .content_type("text/css;charset=utf-8")
-            .body(minified)
+            .body(minified))
+    }
+
+    /// Serve the requested CSS file with minification.
+    ///
+    /// If an error is raised, then a 500 internal server error response is returned.
+    ///
+    /// # Arguments
+    /// * `path` - The path to the CSS file
+    pub async fn serve_css(path: &Path) -> HttpResponse {
+        match Self::serve_css_raw(path).await {
+            Ok(resp) => resp,
+            Err(AppError::NotFound(..)) => Self::serve_404(None),
+            Err(err) => Self::serve_500(&err),
+        }
     }
 
     /// Serve a 404 not found response for invalid URLs, without handling errors.
