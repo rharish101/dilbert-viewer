@@ -294,6 +294,10 @@ mod tests {
 
     use std::fs::read_to_string;
 
+    use actix_web::{
+        body::MessageBody,
+        http::{header::CONTENT_TYPE, StatusCode},
+    };
     use test_case::test_case;
 
     /// Path to the directory where test HTML files are stored
@@ -316,5 +320,58 @@ mod tests {
         let result = Viewer::minify_html(html).expect("Error minifying HTML");
         // Only checks if the minified HTML is actually parsable.
         tl::parse(&result, tl::ParserOptions::default()).expect("Cannot parse minified HTML");
+    }
+
+    #[test_case("static/styles.css", true; "app CSS")]
+    #[test_case("styles.css", false; "missing file")]
+    #[test_case("/", false; "invalid CSS path")]
+    #[actix_web::test]
+    /// Test serving of CSS files.
+    ///
+    /// # Arguments
+    /// * `path` - The path to the CSS file to be used for testing
+    /// * `should_serve` - Whether the expected behaviour is to serve a response or to crash
+    async fn test_css_serving(path: &str, should_serve: bool) {
+        let path = Path::new(path);
+        let resp = match Viewer::serve_css_raw(path).await {
+            Ok(resp) => resp,
+            Err(AppError::NotFound(err)) => {
+                if should_serve {
+                    panic!("Error serving CSS that exists: {}", err);
+                } else {
+                    return;
+                }
+            }
+            Err(err) => panic!("Error serving CSS: {}", err),
+        };
+
+        // Ensure that no CSS is served when it shouldn't.
+        if !should_serve {
+            panic!("CSS served even when path doesn't exist");
+        }
+
+        // Check the response status.
+        assert_eq!(resp.status(), StatusCode::OK, "Response is not status OK");
+
+        // Check the "Content-Type" header.
+        let content_type = resp
+            .headers()
+            .get(CONTENT_TYPE)
+            .expect("Missing Content-Type header")
+            .to_str()
+            .expect("Content-Type header value not valid UTF-8");
+        assert!(
+            content_type.contains("text/css"),
+            "Response content type is not CSS"
+        );
+
+        // Check if response body is valid UTF-8 and the CSS is parsable.
+        let body = resp
+            .into_body()
+            .try_into_bytes()
+            .expect("Could not read response body");
+        let body_utf8 = std::str::from_utf8(&body).expect("Response body not UTF-8");
+        // NOTE: This doesn't guarantee that the CSS is valid.
+        minifier::css::minify(body_utf8).expect("Response body not valid CSS");
     }
 }
