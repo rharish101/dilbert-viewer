@@ -128,3 +128,106 @@ pub trait Scraper<Data, Ref> {
         };
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use test_case::test_case;
+
+    use crate::app::get_http_client;
+    use crate::errors::AppError;
+
+    /// Mock struct for testing the trait `Scraper`.
+    struct MockScraper {
+        /// Expected data to be "scraped".
+        expected: i32,
+        /// Status for the cache retrieval.
+        retrieve_status: GetCacheState,
+        /// Whether scraping works.
+        scrape_works: bool,
+        /// Whether cache storage works.
+        storage_works: bool,
+    }
+
+    /// Enum for the state of the mock struct during cache retrieval.
+    enum GetCacheState {
+        Fresh,
+        Stale,
+        NotFound,
+        Fail,
+    }
+
+    #[async_trait(?Send)]
+    impl Scraper<i32, ()> for MockScraper {
+        async fn get_cached_data(
+            &self,
+            _db: &Option<RedisPool>,
+            _ref: &(),
+        ) -> AppResult<Option<(i32, bool)>> {
+            match self.retrieve_status {
+                GetCacheState::Fresh => Ok(Some((self.expected, true))),
+                GetCacheState::Stale => Ok(Some((self.expected, false))),
+                GetCacheState::NotFound => Ok(None),
+                GetCacheState::Fail => Err(AppError::Internal("Manual error".into())),
+            }
+        }
+
+        async fn cache_data(
+            &self,
+            _db: &Option<RedisPool>,
+            _data: &i32,
+            _ref: &(),
+        ) -> AppResult<()> {
+            if self.storage_works {
+                Ok(())
+            } else {
+                Err(AppError::Internal("Manual error".into()))
+            }
+        }
+
+        async fn scrape_data(&self, _http: &HttpClient, _ref: &()) -> AppResult<i32> {
+            if self.scrape_works {
+                Ok(self.expected)
+            } else {
+                Err(AppError::Internal("Manual error".into()))
+            }
+        }
+    }
+
+    #[test_case(GetCacheState::Fresh, true, true; "fresh retrieval")]
+    #[test_case(GetCacheState::Stale, true, true; "stale retrieval, scrape works, storage works")]
+    #[test_case(GetCacheState::Stale, true, false; "stale retrieval, scrape works, storage fails")]
+    #[test_case(GetCacheState::Stale, false, true; "stale retrieval, scrape fails")]
+    #[test_case(GetCacheState::NotFound, true, true; "empty cache, storage works")]
+    #[test_case(GetCacheState::NotFound, true, false; "empty cache, storage fails")]
+    #[test_case(GetCacheState::Fail, true, true; "cache retrieval fails, storage works")]
+    #[test_case(GetCacheState::Fail, true, false; "cache retrieval fails, storage fails")]
+    #[actix_web::test]
+    /// Test multiple scenarios of data requested from a scraper using the trait's provided method.
+    ///
+    /// # Arguments
+    /// * `retrieve_status` - Status for the cache retrieval
+    /// * `scrape_works` - Whether scraping works
+    /// * `storage_works` - Whether cache storage works
+    async fn test_scraper_get_data(
+        retrieve_status: GetCacheState,
+        scrape_works: bool,
+        storage_works: bool,
+    ) {
+        let expected = 1;
+        let mock_scraper = MockScraper {
+            expected,
+            retrieve_status,
+            scrape_works,
+            storage_works,
+        };
+        let http_client = get_http_client();
+
+        let result = mock_scraper
+            .get_data(&None, &http_client, &())
+            .await
+            .expect("Data retrieval from scraper crashed");
+        assert_eq!(result, expected, "Scraper returned the wrong data");
+    }
+}
