@@ -51,8 +51,12 @@ impl<T: RedisPool + Clone> Viewer<T> {
         }
     }
 
-    /// Serve the requested comic, without handling errors.
-    async fn serve_comic_raw(&self, date: NaiveDate, show_latest: bool) -> AppResult<HttpResponse> {
+    /// Get the info about the requested comic and the latest date.
+    async fn get_comic_info(
+        &self,
+        date: NaiveDate,
+        show_latest: bool,
+    ) -> AppResult<(ComicData, NaiveDate)> {
         // Execute both in parallel, as they are independent of each other.
         let (comic_data_res, latest_comic_res) = futures::join!(
             self.comic_scraper.get_comic_data(&date),
@@ -81,7 +85,7 @@ impl<T: RedisPool + Clone> Viewer<T> {
                     ));
                 }
             } else {
-                return serve_404_raw(Some(&date));
+                return Err(AppError::NotFound(format!("No comic found for {}", date)));
             }
         };
 
@@ -93,7 +97,7 @@ impl<T: RedisPool + Clone> Viewer<T> {
             self.latest_date_scraper.update_latest_date(&date).await?;
         };
 
-        serve_template(date, &comic_data, latest_comic)
+        Ok((comic_data, latest_comic))
     }
 
     /// Serve the requested comic.
@@ -105,8 +109,15 @@ impl<T: RedisPool + Clone> Viewer<T> {
     /// * `show_latest` - If there is no comic found for this date, then whether to show the latest
     ///                   comic
     pub async fn serve_comic(&self, date: NaiveDate, show_latest: bool) -> HttpResponse {
-        match self.serve_comic_raw(date, show_latest).await {
+        match self
+            .get_comic_info(date, show_latest)
+            .await
+            // If `show_latest` is true, then it's possible that `date` is later than the latest
+            // comic date. Hence, use `min` to correct it.
+            .and_then(|info| serve_template(min(date, info.1), &info.0, info.1))
+        {
             Ok(response) => response,
+            Err(AppError::NotFound(..)) => serve_404(Some(&date)),
             Err(err) => serve_500(&err),
         }
     }
