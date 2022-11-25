@@ -343,6 +343,45 @@ mod tests {
         tl::parse(body_utf8, tl::ParserOptions::default()).expect("Response body not valid HTML");
     }
 
+    #[test_case(2000, 1, 1, 2000, 1, 2, "Test"; "past comic")]
+    #[test_case(2000, 1, 1, 2000, 1, 1, "Test"; "latest comic")]
+    #[test_case(2000, 1, 1, 2000, 1, 2, ""; "empty title")]
+    /// Test rendering of comic page templates.
+    ///
+    /// # Arguments
+    /// * `comic_year` - The year of the comic
+    /// * `comic_month` - The month of the comic
+    /// * `comic_day` - The day of the comic
+    /// * `latest_year` - The year of the latest comic
+    /// * `latest_month` - The month of the latest comic
+    /// * `latest_day` - The day of the latest comic
+    /// * `title` - The title of the comic
+    fn test_template_rendering(
+        comic_year: i32,
+        comic_month: u32,
+        comic_day: u32,
+        latest_year: i32,
+        latest_month: u32,
+        latest_day: u32,
+        title: &str,
+    ) {
+        let comic_date = NaiveDate::from_ymd_opt(comic_year, comic_month, comic_day)
+            .expect("Invalid test parameters");
+        let latest_date = NaiveDate::from_ymd_opt(latest_year, latest_month, latest_day)
+            .expect("Invalid test parameters");
+        let comic_data = ComicData {
+            title: title.into(),
+            img_url: REPO_URL.into(), // Any URL should technically work.
+            img_width: 1,
+            img_height: 1,
+        };
+        let resp = Viewer::serve_template(comic_date, &comic_data, latest_date)
+            .expect("Error generating comic page");
+
+        assert_eq!(resp.status(), StatusCode::OK, "Response is not status OK");
+        test_html_response(resp);
+    }
+
     #[test_case(Some((2000, 1, 1)); "missing comic")]
     #[test_case(None; "generic 404")]
     /// Test rendering of the 404 not found page template.
