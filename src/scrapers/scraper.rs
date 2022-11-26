@@ -16,10 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use async_trait::async_trait;
-use awc::Client as HttpClient;
 use deadpool_redis::Pool as RedisPool;
 use log::{error, info, warn};
 
+use crate::client::HttpClient;
 use crate::errors::AppResult;
 
 #[async_trait(?Send)]
@@ -135,7 +135,6 @@ mod tests {
 
     use test_case::test_case;
 
-    use crate::app::get_http_client;
     use crate::errors::AppError;
 
     /// Mock struct for testing the trait `Scraper`.
@@ -222,7 +221,7 @@ mod tests {
             scrape_works,
             storage_works,
         };
-        let http_client = get_http_client();
+        let http_client = HttpClient::new(String::new()); // The client should never be used anyway.
 
         let result = mock_scraper
             .get_data(&None, &http_client, &())

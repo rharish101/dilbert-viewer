@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use async_trait::async_trait;
-use awc::{http::StatusCode, Client as HttpClient};
+use awc::http::StatusCode;
 use chrono::NaiveDate;
 use deadpool_redis::Pool as RedisPool;
 use html_escape::decode_html_entities;
@@ -24,7 +24,8 @@ use log::{error, info};
 use serde::{Deserialize, Serialize};
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 
-use crate::constants::{SRC_DATE_FMT, SRC_PREFIX};
+use crate::client::HttpClient;
+use crate::constants::{SRC_COMIC_PREFIX, SRC_DATE_FMT};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::SerdeAsyncCommands;
@@ -121,8 +122,8 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
         http_client: &HttpClient,
         date: &NaiveDate,
     ) -> AppResult<ComicData> {
-        let url = format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT));
-        let mut resp = http_client.get(url).send().await?;
+        let path = format!("{}{}", SRC_COMIC_PREFIX, date.format(SRC_DATE_FMT));
+        let mut resp = http_client.get(&path).send().await?;
         let status = resp.status();
 
         match status {

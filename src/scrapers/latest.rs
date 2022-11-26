@@ -16,13 +16,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use async_trait::async_trait;
-use awc::{http::StatusCode, Client as HttpClient};
+use awc::http::StatusCode;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use deadpool_redis::Pool as RedisPool;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 
-use crate::constants::{LATEST_DATE_REFRESH, SRC_DATE_FMT, SRC_PREFIX};
+use crate::client::HttpClient;
+use crate::constants::{LATEST_DATE_REFRESH, SRC_COMIC_PREFIX, SRC_DATE_FMT};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::{curr_date, curr_datetime, SerdeAsyncCommands};
@@ -137,10 +138,10 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
         // If there is no comic for this date yet, "dilbert.com" will auto-redirect to the
         // homepage.
         let today = curr_date();
-        let url = format!("{}{}", SRC_PREFIX, curr_date().format(SRC_DATE_FMT));
+        let path = format!("{}{}", SRC_COMIC_PREFIX, curr_date().format(SRC_DATE_FMT));
 
         info!("Trying date \"{}\" for latest comic", today);
-        let mut resp = http_client.get(url).send().await?;
+        let mut resp = http_client.get(&path).send().await?;
         let status = resp.status();
 
         match status {
