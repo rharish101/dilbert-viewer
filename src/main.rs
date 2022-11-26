@@ -41,7 +41,7 @@ use deadpool_redis::{Config as RedisConfig, Pool as RedisPool, Runtime};
 use log::{error, info};
 use rand::{thread_rng, Rng};
 
-use crate::app::Viewer;
+use crate::app::{serve_404, serve_css, Viewer};
 use crate::constants::{
     CSP, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, SRC_BASE_URL, SRC_DATE_FMT, STATIC_DIR,
     STATIC_URL,
@@ -83,7 +83,7 @@ async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(i32, u32, u32)>)
     if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
         viewer.serve_comic(date, false).await
     } else {
-        Viewer::serve_404(None)
+        serve_404(None)
     }
 }
 
@@ -111,7 +111,7 @@ async fn random_comic() -> impl Responder {
 /// This is to be invoked when the actix static file service doesn't find a file.
 async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
     let (http_req, _payload) = req.into_parts();
-    Ok(ServiceResponse::new(http_req, Viewer::serve_404(None)))
+    Ok(ServiceResponse::new(http_req, serve_404(None)))
 }
 
 /// Serve CSS after minification
@@ -119,7 +119,7 @@ async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
 async fn minify_css(path: web::Path<String>) -> impl Responder {
     let stem = path.into_inner();
     let css_path = Path::new(STATIC_DIR).join(stem + ".css");
-    Viewer::serve_css(&css_path).await
+    serve_css(&css_path).await
 }
 
 #[actix_web::main]
