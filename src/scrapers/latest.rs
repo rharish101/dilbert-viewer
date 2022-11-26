@@ -166,3 +166,62 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use actix_web::http::{Method, StatusCode};
+    use test_case::test_case;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
+    use crate::utils::curr_date;
+
+    #[test_case(true; "is latest")]
+    #[test_case(false; "is not latest")]
+    #[actix_web::test]
+    /// Test scraping of the latest date.
+    ///
+    /// # Arguments
+    /// * `is_latest` - Whether the current date is to be indicated as the date of the latest comic
+    async fn test_latest_date_scraping(is_latest: bool) {
+        let mock_server = MockServer::start().await;
+        let http_client = HttpClient::new(mock_server.uri());
+        let date = curr_date();
+        let scraper = LatestDateScraper::new();
+
+        let expected = if is_latest {
+            date
+        } else {
+            // "dilbert.com" releases a new comic every day. Hence, if today's comic doesn't exist,
+            // then it must exist for yesterday.
+            date - Duration::days(1)
+        };
+
+        let date_str = date.format(SRC_DATE_FMT).to_string();
+        let response_status = if is_latest {
+            StatusCode::OK
+        } else {
+            // "dilbert.com" uses 302 FOUND to inform that the comic doesn't exist.
+            StatusCode::FOUND
+        };
+
+        // Set up the mock server to return the pre-fetched "dilbert.com" response for the given date.
+        Mock::given(method(Method::GET.as_str()))
+            .and(path(format!("/{}{}", SRC_COMIC_PREFIX, date_str)))
+            // Response body shouldn't matter, so keep it empty.
+            .respond_with(ResponseTemplate::new(response_status.as_u16()))
+            .mount(&mock_server)
+            .await;
+
+        // The scraping should fail if and only if the server redirects.
+        let result = scraper
+            .scrape_data(&http_client, &())
+            .await
+            .expect("Failed to scrape latest date");
+        assert_eq!(result, expected, "Scraped the wrong latest date");
+    }
+}
