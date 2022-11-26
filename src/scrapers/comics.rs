@@ -30,7 +30,7 @@ use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 use crate::utils::SerdeAsyncCommands;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct ComicData {
     /// The title of the comic
     pub title: String,
@@ -215,5 +215,81 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
             img_width,
             img_height,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use actix_web::http::{Method, StatusCode};
+    use test_case::test_case;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
+    /// Path to the directory where test scraping files are stored
+    const SCRAPING_TEST_CASE_PATH: &str = "testdata/scraping";
+
+    #[test_case((2000, 1, 1), false, ("", "https://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
+    #[test_case((2020, 1, 1), false, ("Rfp Process", "https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
+    #[test_case((2000, 1, 1), true, ("", "", 0, 0); "missing")]
+    #[actix_web::test]
+    /// Test comic scraping.
+    ///
+    /// # Arguments
+    /// * `date_ymd` - A tuple containing the year, month and day for the comic
+    /// * `missing` - Whether the comic is to be indicated as missing
+    /// * `comic_data` - The tuple for the comic data containing the title, image URL, image width
+    ///                  and image height
+    async fn test_comic_scraping(
+        date_ymd: (i32, u32, u32),
+        missing: bool,
+        comic_data: (&str, &str, i32, i32),
+    ) {
+        let mock_server = MockServer::start().await;
+        let http_client = HttpClient::new(mock_server.uri());
+        let date = NaiveDate::from_ymd_opt(date_ymd.0, date_ymd.1, date_ymd.2)
+            .expect("Invalid test parameters");
+        let scraper = ComicScraper::new();
+
+        let expected = ComicData {
+            title: comic_data.0.into(),
+            img_url: comic_data.1.into(),
+            img_width: comic_data.2,
+            img_height: comic_data.3,
+        };
+
+        let date_str = date.format(SRC_DATE_FMT).to_string();
+        let response = if missing {
+            // "dilbert.com" uses 302 FOUND to inform that the comic is missing.
+            // Response body shouldn't matter, so keep it empty.
+            ResponseTemplate::new(StatusCode::FOUND.as_u16())
+        } else {
+            let html =
+                tokio::fs::read_to_string(format!("{}/{}.html", SCRAPING_TEST_CASE_PATH, date_str))
+                    .await
+                    .expect("Couldn't read test page for scraping");
+            ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html)
+        };
+
+        // Set up the mock server to return the pre-fetched "dilbert.com" response for the given date.
+        Mock::given(method(Method::GET.as_str()))
+            .and(path(format!("/{}{}", SRC_COMIC_PREFIX, date_str)))
+            .respond_with(response)
+            .mount(&mock_server)
+            .await;
+
+        // The scraping should fail if and only if the server redirects.
+        if let Ok(result) = scraper.scrape_data(&http_client, &date).await {
+            if missing {
+                panic!("Somehow scraped a missing comic");
+            } else {
+                assert_eq!(result, expected, "Scraped the wrong comic data");
+            }
+        } else if !missing {
+            panic!("Failed to scrape comic data");
+        };
     }
 }
