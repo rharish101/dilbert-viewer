@@ -21,21 +21,21 @@ use std::path::Path;
 use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
 use chrono::{Duration, NaiveDate};
-use deadpool_redis::Pool as RedisPool;
 use log::{debug, error, info};
 
 use crate::client::HttpClient;
 use crate::constants::{
     APP_URL, DISP_DATE_FMT, FIRST_COMIC, REPO_URL, SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT,
 };
+use crate::db::RedisPool;
 use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 use crate::utils::str_to_date;
 
-pub struct Viewer {
+pub struct Viewer<T> {
     /// The pool of connections to the database
-    db: Option<RedisPool>,
+    db: Option<T>,
     /// The HTTP client for connecting to the server
     http_client: HttpClient,
 
@@ -45,9 +45,9 @@ pub struct Viewer {
     latest_date_scraper: LatestDateScraper,
 }
 
-impl Viewer {
+impl<T: RedisPool> Viewer<T> {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db: Option<RedisPool>, base_url: String) -> Self {
+    pub fn new(db: Option<T>, base_url: String) -> Self {
         Self {
             db,
             http_client: HttpClient::new(base_url),

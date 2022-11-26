@@ -18,7 +18,6 @@
 use async_trait::async_trait;
 use awc::http::StatusCode;
 use chrono::NaiveDate;
-use deadpool_redis::Pool as RedisPool;
 use html_escape::decode_html_entities;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -26,9 +25,9 @@ use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 
 use crate::client::HttpClient;
 use crate::constants::{SRC_COMIC_PREFIX, SRC_DATE_FMT};
+use crate::db::{RedisPool, SerdeAsyncCommands};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
-use crate::utils::SerdeAsyncCommands;
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct ComicData {
@@ -64,7 +63,7 @@ impl ComicScraper {
     /// * `date` - The date of the requested comic
     pub async fn get_comic_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         http_client: &HttpClient,
         date: &NaiveDate,
     ) -> AppResult<Option<ComicData>> {
@@ -83,7 +82,7 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
     /// If the comic date entry isn't in the cache, None is returned.
     async fn get_cached_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         date: &NaiveDate,
     ) -> AppResult<Option<(ComicData, bool)>> {
         let mut conn = if let Some(db) = db {
@@ -101,7 +100,7 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
     /// Cache the comic data into the database.
     async fn cache_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         comic_data: &ComicData,
         date: &NaiveDate,
     ) -> AppResult<()> {

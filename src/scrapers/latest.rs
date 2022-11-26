@@ -18,15 +18,15 @@
 use async_trait::async_trait;
 use awc::http::StatusCode;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
-use deadpool_redis::Pool as RedisPool;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::client::HttpClient;
 use crate::constants::{LATEST_DATE_REFRESH, SRC_COMIC_PREFIX, SRC_DATE_FMT};
+use crate::db::{RedisPool, SerdeAsyncCommands};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
-use crate::utils::{curr_date, curr_datetime, SerdeAsyncCommands};
+use crate::utils::{curr_date, curr_datetime};
 
 /// Key for storing the latest date in the DB
 const LATEST_DATE_KEY: &str = "latest-date";
@@ -56,7 +56,7 @@ impl LatestDateScraper {
     /// * `http_client` - The HTTP client for scraping from "dilbert.com"
     pub async fn get_latest_date(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         http_client: &HttpClient,
     ) -> AppResult<NaiveDate> {
         self.get_data(db, http_client, &()).await
@@ -69,7 +69,7 @@ impl LatestDateScraper {
     /// * `date` - The date of the latest comic
     pub async fn update_latest_date(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         date: &NaiveDate,
     ) -> AppResult<()> {
         self.cache_data(db, date, &()).await
@@ -85,7 +85,7 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
     /// long time back) or not.
     async fn get_cached_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         _reference: &(),
     ) -> AppResult<Option<(NaiveDate, bool)>> {
         let mut conn = if let Some(db) = db {
@@ -113,7 +113,7 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
     /// Cache the latest date into the database.
     async fn cache_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         date: &NaiveDate,
         _reference: &(),
     ) -> AppResult<()> {
