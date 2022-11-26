@@ -45,3 +45,33 @@ impl HttpClient {
         self.client.get(format!("{}/{}", self.base_url, path))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use actix_web::http::{Method, StatusCode};
+    use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+
+    #[actix_web::test]
+    /// Test whether the HTTP client can actually connect to a server.
+    async fn test_http_client() {
+        let mock_server = MockServer::start().await;
+        // Respond to all GET requests with status OK.
+        Mock::given(method(Method::GET.as_str()))
+            .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()))
+            .mount(&mock_server)
+            .await;
+
+        // See if the client can actually connect and get a response.
+        let http_client = HttpClient::new(mock_server.uri());
+        let resp = http_client
+            .get("")
+            .send()
+            .await
+            .expect("Failed to connect to mock server");
+
+        // Sanity check to make sure that we get the response we set.
+        assert_eq!(resp.status(), StatusCode::OK, "Response is not status OK");
+    }
+}

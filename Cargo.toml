@@ -36,3 +36,4 @@ lto = true
 [dev-dependencies]
 content-security-policy = "0.4.2"
 test-case = "2.2.2"
+wiremock = "0.5.15"
