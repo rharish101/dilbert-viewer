@@ -17,17 +17,16 @@
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use std::cmp::{max, min};
 use std::path::Path;
-use std::time::Duration as TimeDuration;
 
 use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
-use awc::Client as HttpClient;
-use chrono::{Duration as DateDuration, NaiveDate};
+use chrono::{Duration, NaiveDate};
 use deadpool_redis::Pool as RedisPool;
 use log::{debug, error, info};
 
+use crate::client::HttpClient;
 use crate::constants::{
-    APP_URL, DISP_DATE_FMT, FIRST_COMIC, REPO_URL, RESP_TIMEOUT, SRC_DATE_FMT, SRC_PREFIX,
+    APP_URL, DISP_DATE_FMT, FIRST_COMIC, REPO_URL, SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT,
 };
 use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
@@ -46,21 +45,12 @@ pub struct Viewer {
     latest_date_scraper: LatestDateScraper,
 }
 
-/// Initialize the client session for scraping comics.
-pub fn get_http_client() -> HttpClient {
-    let timeout = TimeDuration::from_secs(RESP_TIMEOUT);
-    HttpClient::builder()
-        .disable_redirects()
-        .timeout(timeout)
-        .finish()
-}
-
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db: Option<RedisPool>) -> Self {
+    pub fn new(db: Option<RedisPool>, base_url: String) -> Self {
         Self {
             db,
-            http_client: get_http_client(),
+            http_client: HttpClient::new(base_url),
             comic_scraper: ComicScraper::new(),
             latest_date_scraper: LatestDateScraper::new(),
         }
@@ -97,10 +87,10 @@ impl Viewer {
         let first_comic = str_to_date(FIRST_COMIC, SRC_DATE_FMT)?;
 
         // Links to previous and next comics
-        let previous_comic = &max(first_comic, date - DateDuration::days(1))
+        let previous_comic = &max(first_comic, date - Duration::days(1))
             .format(SRC_DATE_FMT)
             .to_string();
-        let next_comic = &min(latest_comic, date + DateDuration::days(1))
+        let next_comic = &min(latest_comic, date + Duration::days(1))
             .format(SRC_DATE_FMT)
             .to_string();
 
@@ -113,7 +103,12 @@ impl Viewer {
             next_comic,
             disable_left_nav: date == first_comic,
             disable_right_nav: date == latest_comic,
-            permalink: &format!("{}{}", SRC_PREFIX, date.format(SRC_DATE_FMT)),
+            permalink: &format!(
+                "{}/{}{}",
+                SRC_BASE_URL,
+                SRC_COMIC_PREFIX,
+                date.format(SRC_DATE_FMT)
+            ),
             app_url: APP_URL,
             repo_url: REPO_URL,
         }

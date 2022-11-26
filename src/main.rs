@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 mod app;
+mod client;
 mod constants;
 mod errors;
 mod scrapers;
@@ -42,7 +43,8 @@ use rand::{thread_rng, Rng};
 
 use crate::app::Viewer;
 use crate::constants::{
-    CSP, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, SRC_DATE_FMT, STATIC_DIR, STATIC_URL,
+    CSP, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, SRC_BASE_URL, SRC_DATE_FMT, STATIC_DIR,
+    STATIC_URL,
 };
 use crate::errors::DbInitError;
 use crate::utils::{curr_date, str_to_date};
@@ -144,7 +146,7 @@ async fn main() -> IOResult<()> {
 
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here
-        let viewer = Viewer::new(db_pool.clone());
+        let viewer = Viewer::new(db_pool.clone(), SRC_BASE_URL.into());
         let static_service =
             Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
         let default_headers = DefaultHeaders::new().add(("Content-Security-Policy", CSP));
