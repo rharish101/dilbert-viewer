@@ -56,69 +56,6 @@ impl Viewer {
         }
     }
 
-    fn minify_html(mut html: String) -> AppResult<String> {
-        let old_len = html.len();
-        let result = minify_html::in_place_str(html.as_mut_str(), &minify_html::Cfg::new());
-
-        // The in-place minification returns a slice to the minified part, but leaves the rest of
-        // the string as-is. Hence, we get the length of the slice and truncate the string, since
-        // we want to return an owned string.
-        let new_len = match result {
-            Ok(slice) => slice.len(),
-            Err(err) => Err(MinificationError::Html(err))?,
-        };
-        html.truncate(new_len);
-
-        debug!("Minified HTML from {} bytes to {}", old_len, html.len());
-        Ok(html)
-    }
-
-    /// Serve the rendered HTML given scraped data.
-    ///
-    /// # Arguments
-    /// * `date` - The date of the comic
-    /// * `comic_data` - The scraped comic data
-    /// * `latest_comic` - The date of the latest comic
-    fn serve_template(
-        date: NaiveDate,
-        comic_data: &ComicData,
-        latest_comic: NaiveDate,
-    ) -> AppResult<HttpResponse> {
-        let first_comic = str_to_date(FIRST_COMIC, SRC_DATE_FMT)?;
-
-        // Links to previous and next comics
-        let previous_comic = &max(first_comic, date - Duration::days(1))
-            .format(SRC_DATE_FMT)
-            .to_string();
-        let next_comic = &min(latest_comic, date + Duration::days(1))
-            .format(SRC_DATE_FMT)
-            .to_string();
-
-        let webpage = ComicTemplate {
-            data: comic_data,
-            date_disp: &date.format(DISP_DATE_FMT).to_string(),
-            date: &date.format(SRC_DATE_FMT).to_string(),
-            first_comic: FIRST_COMIC,
-            previous_comic,
-            next_comic,
-            disable_left_nav: date == first_comic,
-            disable_right_nav: date == latest_comic,
-            permalink: &format!(
-                "{}/{}{}",
-                SRC_BASE_URL,
-                SRC_COMIC_PREFIX,
-                date.format(SRC_DATE_FMT)
-            ),
-            app_url: APP_URL,
-            repo_url: REPO_URL,
-        }
-        .render()?;
-
-        Ok(HttpResponse::Ok()
-            .content_type(ContentType::html())
-            .body(Self::minify_html(webpage)?))
-    }
-
     /// Serve the requested comic, without handling errors.
     async fn serve_comic_raw(&self, date: NaiveDate, show_latest: bool) -> AppResult<HttpResponse> {
         // Execute both in parallel, as they are independent of each other.
@@ -154,7 +91,7 @@ impl Viewer {
                     ));
                 }
             } else {
-                return Self::serve_404_raw(Some(&date));
+                return serve_404_raw(Some(&date));
             }
         };
 
@@ -168,7 +105,7 @@ impl Viewer {
                 .await?;
         };
 
-        Self::serve_template(date, &comic_data, latest_comic)
+        serve_template(date, &comic_data, latest_comic)
     }
 
     /// Serve the requested comic.
@@ -182,103 +119,166 @@ impl Viewer {
     pub async fn serve_comic(&self, date: NaiveDate, show_latest: bool) -> HttpResponse {
         match self.serve_comic_raw(date, show_latest).await {
             Ok(response) => response,
-            Err(err) => Self::serve_500(&err),
+            Err(err) => serve_500(&err),
         }
     }
+}
 
-    /// Serve the requested CSS file with minification, without handling errors.
-    async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
-        let css = match tokio::fs::read(path).await {
-            Ok(text) => text,
-            Err(err) => return Err(AppError::NotFound(err.to_string())),
-        };
-        let css_str = std::str::from_utf8(&css)?;
+fn minify_html(mut html: String) -> AppResult<String> {
+    let old_len = html.len();
+    let result = minify_html::in_place_str(html.as_mut_str(), &minify_html::Cfg::new());
 
-        let minified = match minifier::css::minify(css_str) {
-            Ok(minified) => minified.to_string(),
-            Err(err) => return Err(MinificationError::Css(err.into()).into()),
-        };
-        debug!(
-            "Minified \"{}\" from {} bytes to {}",
-            path.display(),
-            css_str.len(),
-            minified.len()
-        );
+    // The in-place minification returns a slice to the minified part, but leaves the rest of
+    // the string as-is. Hence, we get the length of the slice and truncate the string, since
+    // we want to return an owned string.
+    let new_len = match result {
+        Ok(slice) => slice.len(),
+        Err(err) => Err(MinificationError::Html(err))?,
+    };
+    html.truncate(new_len);
 
-        Ok(HttpResponse::Ok()
-            .content_type("text/css;charset=utf-8")
-            .body(minified))
+    debug!("Minified HTML from {} bytes to {}", old_len, html.len());
+    Ok(html)
+}
+
+/// Serve the rendered HTML given scraped data.
+///
+/// # Arguments
+/// * `date` - The date of the comic
+/// * `comic_data` - The scraped comic data
+/// * `latest_comic` - The date of the latest comic
+fn serve_template(
+    date: NaiveDate,
+    comic_data: &ComicData,
+    latest_comic: NaiveDate,
+) -> AppResult<HttpResponse> {
+    let first_comic = str_to_date(FIRST_COMIC, SRC_DATE_FMT)?;
+
+    // Links to previous and next comics
+    let previous_comic = &max(first_comic, date - Duration::days(1))
+        .format(SRC_DATE_FMT)
+        .to_string();
+    let next_comic = &min(latest_comic, date + Duration::days(1))
+        .format(SRC_DATE_FMT)
+        .to_string();
+
+    let webpage = ComicTemplate {
+        data: comic_data,
+        date_disp: &date.format(DISP_DATE_FMT).to_string(),
+        date: &date.format(SRC_DATE_FMT).to_string(),
+        first_comic: FIRST_COMIC,
+        previous_comic,
+        next_comic,
+        disable_left_nav: date == first_comic,
+        disable_right_nav: date == latest_comic,
+        permalink: &format!(
+            "{}/{}{}",
+            SRC_BASE_URL,
+            SRC_COMIC_PREFIX,
+            date.format(SRC_DATE_FMT)
+        ),
+        app_url: APP_URL,
+        repo_url: REPO_URL,
     }
+    .render()?;
 
-    /// Serve the requested CSS file with minification.
-    ///
-    /// If an error is raised, then a 500 internal server error response is returned.
-    ///
-    /// # Arguments
-    /// * `path` - The path to the CSS file
-    pub async fn serve_css(path: &Path) -> HttpResponse {
-        match Self::serve_css_raw(path).await {
-            Ok(resp) => resp,
-            Err(AppError::NotFound(..)) => Self::serve_404(None),
-            Err(err) => Self::serve_500(&err),
+    Ok(HttpResponse::Ok()
+        .content_type(ContentType::html())
+        .body(minify_html(webpage)?))
+}
+
+/// Serve the requested CSS file with minification, without handling errors.
+async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
+    let css = match tokio::fs::read(path).await {
+        Ok(text) => text,
+        Err(err) => return Err(AppError::NotFound(err.to_string())),
+    };
+    let css_str = std::str::from_utf8(&css)?;
+
+    let minified = match minifier::css::minify(css_str) {
+        Ok(minified) => minified.to_string(),
+        Err(err) => return Err(MinificationError::Css(err.into()).into()),
+    };
+    debug!(
+        "Minified \"{}\" from {} bytes to {}",
+        path.display(),
+        css_str.len(),
+        minified.len()
+    );
+
+    Ok(HttpResponse::Ok()
+        .content_type("text/css;charset=utf-8")
+        .body(minified))
+}
+
+/// Serve the requested CSS file with minification.
+///
+/// If an error is raised, then a 500 internal server error response is returned.
+///
+/// # Arguments
+/// * `path` - The path to the CSS file
+pub async fn serve_css(path: &Path) -> HttpResponse {
+    match serve_css_raw(path).await {
+        Ok(resp) => resp,
+        Err(AppError::NotFound(..)) => serve_404(None),
+        Err(err) => serve_500(&err),
+    }
+}
+
+/// Serve a 404 not found response for invalid URLs, without handling errors.
+fn serve_404_raw(date: Option<&NaiveDate>) -> AppResult<HttpResponse> {
+    let date_str = date.map(|date| date.format(SRC_DATE_FMT).to_string());
+    let webpage = NotFoundTemplate {
+        date: date_str.as_deref(),
+        repo_url: REPO_URL,
+    }
+    .render()?;
+    Ok(HttpResponse::NotFound()
+        .content_type(ContentType::html())
+        .body(minify_html(webpage)?))
+}
+
+/// Serve a 404 not found response for invalid URLs.
+///
+/// If an error is raised, then a 500 internal server error response is returned.
+///
+/// # Arguments
+/// * `date` - The date of the requested comic, if available. This must be a valid date for
+///            which a comic doesn't exist.
+pub fn serve_404(date: Option<&NaiveDate>) -> HttpResponse {
+    match serve_404_raw(date) {
+        Ok(response) => response,
+        Err(err) => serve_500(&err),
+    }
+}
+
+/// Serve a 500 internal server error response.
+///
+/// # Arguments
+/// * `err` - The actual internal server error
+pub fn serve_500(err: &AppError) -> HttpResponse {
+    let error = &format!("{}", err);
+    let mut response = HttpResponse::InternalServerError();
+
+    let error_template = ErrorTemplate {
+        error,
+        repo_url: REPO_URL,
+    };
+    match error_template.render() {
+        Ok(webpage) => {
+            // Minification can crash, so if it fails, just serve the original. Since
+            // minification modifies the input, give it a clone.
+            let minified = if let Ok(html) = minify_html(webpage.clone()) {
+                html
+            } else {
+                webpage
+            };
+            response.content_type(ContentType::html()).body(minified)
         }
-    }
-
-    /// Serve a 404 not found response for invalid URLs, without handling errors.
-    fn serve_404_raw(date: Option<&NaiveDate>) -> AppResult<HttpResponse> {
-        let date_str = date.map(|date| date.format(SRC_DATE_FMT).to_string());
-        let webpage = NotFoundTemplate {
-            date: date_str.as_deref(),
-            repo_url: REPO_URL,
-        }
-        .render()?;
-        Ok(HttpResponse::NotFound()
-            .content_type(ContentType::html())
-            .body(Self::minify_html(webpage)?))
-    }
-
-    /// Serve a 404 not found response for invalid URLs.
-    ///
-    /// If an error is raised, then a 500 internal server error response is returned.
-    ///
-    /// # Arguments
-    /// * `date` - The date of the requested comic, if available. This must be a valid date for
-    ///            which a comic doesn't exist.
-    pub fn serve_404(date: Option<&NaiveDate>) -> HttpResponse {
-        match Self::serve_404_raw(date) {
-            Ok(response) => response,
-            Err(err) => Self::serve_500(&err),
-        }
-    }
-
-    /// Serve a 500 internal server error response.
-    ///
-    /// # Arguments
-    /// * `err` - The actual internal server error
-    pub fn serve_500(err: &AppError) -> HttpResponse {
-        let error = &format!("{}", err);
-        let mut response = HttpResponse::InternalServerError();
-
-        let error_template = ErrorTemplate {
-            error,
-            repo_url: REPO_URL,
-        };
-        match error_template.render() {
-            Ok(webpage) => {
-                // Minification can crash, so if it fails, just serve the original. Since
-                // minification modifies the input, give it a clone.
-                let minified = if let Ok(html) = Self::minify_html(webpage.clone()) {
-                    html
-                } else {
-                    webpage
-                };
-                response.content_type(ContentType::html()).body(minified)
-            }
-            Err(err) => {
-                error!("Couldn't render Error 500 HTML: {}", err);
-                // An empty Error 500 response is still better than crashing
-                response.finish()
-            }
+        Err(err) => {
+            error!("Couldn't render Error 500 HTML: {}", err);
+            // An empty Error 500 response is still better than crashing
+            response.finish()
         }
     }
 }
@@ -315,7 +315,7 @@ mod tests {
         let html =
             read_to_string(&path).unwrap_or_else(|_| panic!("Couldn't read test case {}", &path));
 
-        let result = Viewer::minify_html(html).expect("Error minifying HTML");
+        let result = minify_html(html).expect("Error minifying HTML");
         // Only checks if the minified HTML is actually parsable.
         tl::parse(&result, tl::ParserOptions::default()).expect("Cannot parse minified HTML");
     }
@@ -370,7 +370,7 @@ mod tests {
             img_width: 1,
             img_height: 1,
         };
-        let resp = Viewer::serve_template(comic_date, &comic_data, latest_date)
+        let resp = serve_template(comic_date, &comic_data, latest_date)
             .expect("Error generating comic page");
 
         assert_eq!(resp.status(), StatusCode::OK, "Response is not status OK");
@@ -387,7 +387,7 @@ mod tests {
         let date = date_ymd.map(|ymd| {
             NaiveDate::from_ymd_opt(ymd.0, ymd.1, ymd.2).expect("Invalid test parameters")
         });
-        let resp = Viewer::serve_404_raw(date.as_ref()).expect("Error generating 404 page");
+        let resp = serve_404_raw(date.as_ref()).expect("Error generating 404 page");
 
         assert_eq!(
             resp.status(),
@@ -409,7 +409,7 @@ mod tests {
     /// # Arguments
     /// * `error_msg` - The error message to be displayed in the page
     fn test_500_page(error_msg: &str) {
-        let resp = Viewer::serve_500(&AppError::Internal(error_msg.into()));
+        let resp = serve_500(&AppError::Internal(error_msg.into()));
         assert_eq!(
             resp.status(),
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -429,7 +429,7 @@ mod tests {
     /// * `should_serve` - Whether the expected behaviour is to serve a response or to crash
     async fn test_css_serving(path: &str, should_serve: bool) {
         let path = Path::new(path);
-        let resp = match Viewer::serve_css_raw(path).await {
+        let resp = match serve_css_raw(path).await {
             Ok(resp) => resp,
             Err(AppError::NotFound(err)) => {
                 if should_serve {
