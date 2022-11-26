@@ -16,10 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use async_trait::async_trait;
-use deadpool_redis::Pool as RedisPool;
 use log::{error, info, warn};
 
 use crate::client::HttpClient;
+use crate::db::RedisPool;
 use crate::errors::AppResult;
 
 #[async_trait(?Send)]
@@ -35,7 +35,7 @@ pub trait Scraper<Data, Ref> {
     /// * `reference` - The reference to the data that is to be retrieved
     async fn get_cached_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         reference: &Ref,
     ) -> AppResult<Option<(Data, bool)>>;
 
@@ -47,7 +47,7 @@ pub trait Scraper<Data, Ref> {
     /// * `reference` - The reference to the data that is to be retrieved
     async fn cache_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         data: &Data,
         reference: &Ref,
     ) -> AppResult<()>;
@@ -67,7 +67,7 @@ pub trait Scraper<Data, Ref> {
     /// * `db` - The pool of connections to the DB
     /// * `data` - The data that is to be cached
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn safely_cache_data(&self, db: &Option<RedisPool>, data: &Data, reference: &Ref) {
+    async fn safely_cache_data(&self, db: &Option<impl RedisPool>, data: &Data, reference: &Ref) {
         if let Err(err) = self.cache_data(db, data, reference).await {
             error!("Error caching data: {}", err);
         }
@@ -81,7 +81,7 @@ pub trait Scraper<Data, Ref> {
     /// * `reference` - The reference to the data that is to be retrieved
     async fn get_data(
         &self,
-        db: &Option<RedisPool>,
+        db: &Option<impl RedisPool>,
         http_client: &HttpClient,
         reference: &Ref,
     ) -> AppResult<Data> {
@@ -161,7 +161,7 @@ mod tests {
     impl Scraper<i32, ()> for MockScraper {
         async fn get_cached_data(
             &self,
-            _db: &Option<RedisPool>,
+            _db: &Option<impl RedisPool>,
             _ref: &(),
         ) -> AppResult<Option<(i32, bool)>> {
             match self.retrieve_status {
@@ -174,7 +174,7 @@ mod tests {
 
         async fn cache_data(
             &self,
-            _db: &Option<RedisPool>,
+            _db: &Option<impl RedisPool>,
             _data: &i32,
             _ref: &(),
         ) -> AppResult<()> {
@@ -222,9 +222,10 @@ mod tests {
             storage_works,
         };
         let http_client = HttpClient::new(String::new()); // The client should never be used anyway.
+        let db: Option<deadpool_redis::Pool> = None;
 
         let result = mock_scraper
-            .get_data(&None, &http_client, &())
+            .get_data(&db, &http_client, &())
             .await
             .expect("Data retrieval from scraper crashed");
         assert_eq!(result, expected, "Scraper returned the wrong data");

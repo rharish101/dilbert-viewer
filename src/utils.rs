@@ -15,10 +15,7 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
-use async_trait::async_trait;
 use chrono::{format::ParseResult, NaiveDate, NaiveDateTime, Utc};
-use deadpool_redis::redis::{AsyncCommands, RedisResult};
-use serde::{de::DeserializeOwned, Serialize};
 
 /// Return the current date.
 ///
@@ -42,40 +39,6 @@ pub fn curr_datetime() -> NaiveDateTime {
 pub fn str_to_date(date: &str, fmt: &str) -> ParseResult<NaiveDate> {
     NaiveDate::parse_from_str(date, fmt)
 }
-
-/// Trait to get and set Redis key-values with automatic serde (de)serialization using JSON.
-// `redis::RedisFuture` is basically a future returned by `async_trait`, so using the latter is
-// basically free convenience.
-#[async_trait]
-pub trait SerdeAsyncCommands: AsyncCommands {
-    /// Get a possibly-null value given a key.
-    ///
-    /// The null value indicates a missing key in the DB.
-    async fn get<K, RV: DeserializeOwned>(&mut self, key: K) -> RedisResult<Option<RV>>
-    where
-        K: Serialize + Send + Sync,
-    {
-        let data: Option<Vec<u8>> = AsyncCommands::get(self, serde_json::to_vec(&key)?).await?;
-        Ok(if let Some(data) = data {
-            Some(serde_json::from_slice(data.as_slice())?)
-        } else {
-            None
-        })
-    }
-
-    /// Set a value for a given key.
-    async fn set<K, V>(&mut self, key: K, value: V) -> RedisResult<()>
-    where
-        K: Serialize + Send + Sync,
-        V: Serialize + Send + Sync,
-    {
-        AsyncCommands::set(self, serde_json::to_vec(&key)?, serde_json::to_vec(&value)?).await?;
-        Ok(())
-    }
-}
-
-// Auto-implement it where possible.
-impl<T> SerdeAsyncCommands for T where T: AsyncCommands {}
 
 #[cfg(test)]
 mod tests {

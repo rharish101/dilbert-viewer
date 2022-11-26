@@ -18,6 +18,7 @@
 mod app;
 mod client;
 mod constants;
+mod db;
 mod errors;
 mod scrapers;
 mod templates;
@@ -27,7 +28,6 @@ use std::env;
 use std::io::Result as IOResult;
 use std::path::Path;
 use std::str::FromStr;
-use std::time::Duration as TimeDuration;
 
 use actix_files::Files;
 use actix_web::{
@@ -36,35 +36,21 @@ use actix_web::{
     middleware::{Compress, DefaultHeaders, Logger},
     web, App, Error as WebError, HttpResponse, HttpServer, Responder,
 };
-use chrono::{Duration as DateDuration, NaiveDate};
-use deadpool_redis::{Config as RedisConfig, Pool as RedisPool, Runtime};
+use chrono::{Duration, NaiveDate};
+use deadpool_redis::Pool;
 use log::{error, info};
 use rand::{thread_rng, Rng};
 
 use crate::app::{serve_404, serve_css, Viewer};
 use crate::constants::{
-    CSP, DB_TIMEOUT, FIRST_COMIC, MAX_DB_CONN, PORT, SRC_BASE_URL, SRC_DATE_FMT, STATIC_DIR,
-    STATIC_URL,
+    CSP, FIRST_COMIC, PORT, SRC_BASE_URL, SRC_DATE_FMT, STATIC_DIR, STATIC_URL,
 };
-use crate::errors::DbInitError;
+use crate::db::get_db_pool;
 use crate::utils::{curr_date, str_to_date};
-
-/// Initialize the database connection pool for caching data.
-async fn get_db_pool() -> Result<RedisPool, DbInitError> {
-    // Heroku needs SSL for its Redis addon, but uses a self-signed certificate. So simply disable
-    // verification while keeping SSL.
-    let config = RedisConfig::from_url(env::var("REDIS_TLS_URL")? + "#insecure");
-    let pool_builder = config
-        .builder()?
-        .runtime(Runtime::Tokio1)
-        .max_size(MAX_DB_CONN)
-        .wait_timeout(Some(TimeDuration::from_secs(DB_TIMEOUT)));
-    Ok(pool_builder.build()?)
-}
 
 /// Serve the latest comic.
 #[get("/")]
-async fn latest_comic(viewer: web::Data<Viewer>) -> impl Responder {
+async fn latest_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
     // If there is no comic for this date yet, "dilbert.com" will redirect to the homepage. The
     // code can handle this by instead showing the contents of the latest comic.
     let today = curr_date();
@@ -76,7 +62,10 @@ async fn latest_comic(viewer: web::Data<Viewer>) -> impl Responder {
 
 /// Serve the comic requested in the given URL.
 #[get("/{year}-{month}-{day}")]
-async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(i32, u32, u32)>) -> impl Responder {
+async fn comic_page(
+    viewer: web::Data<Viewer<Pool>>,
+    path: web::Path<(i32, u32, u32)>,
+) -> impl Responder {
     let (year, month, day) = path.into_inner();
 
     // Check to see if the date is invalid.
@@ -93,12 +82,12 @@ async fn random_comic() -> impl Responder {
     let first = str_to_date(FIRST_COMIC, SRC_DATE_FMT)
         .expect("Variable FIRST_COMIC not in format of variable SRC_DATE_FMT");
     // There might not be any comic for this date yet, so exclude the latest date.
-    let latest = curr_date() - DateDuration::days(1);
+    let latest = curr_date() - Duration::days(1);
 
     let mut rng = thread_rng();
     // Offset (in days) from the first date
     let rand_offset = rng.gen_range(0..(latest - first).num_days());
-    let rand_date = first + DateDuration::days(rand_offset);
+    let rand_date = first + Duration::days(rand_offset);
 
     let location = format!("/{}", rand_date.format(SRC_DATE_FMT));
     HttpResponse::TemporaryRedirect()
