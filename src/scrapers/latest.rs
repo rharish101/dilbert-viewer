@@ -172,13 +172,76 @@ mod tests {
     use super::*;
 
     use actix_web::http::{Method, StatusCode};
+    use deadpool_redis::redis::{Cmd, Value};
+    use redis_test::{IntoRedisValue, MockCmd, MockRedisConnection};
     use test_case::test_case;
     use wiremock::{
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
     };
 
+    use crate::db::mock::MockPool;
+    use crate::scrapers::scraper::mock::GetCacheState;
     use crate::utils::curr_date;
+
+    #[test_case(GetCacheState::Fresh; "fresh retrieval")]
+    #[test_case(GetCacheState::Stale; "stale retrieval")]
+    #[test_case(GetCacheState::NotFound; "empty cache")]
+    #[actix_web::test]
+    /// Test cache retrieval of the latest date.
+    ///
+    /// # Arguments
+    /// * `status` - Status for the cache retrieval
+    async fn test_latest_date_cache_retrieval(status: GetCacheState) {
+        // Set up the expected return values, and the entry to store in the mock cache.
+        let date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+        let (expected, cache_entry) = match status {
+            GetCacheState::Fresh => {
+                let latest_date_info = LatestDateInfo {
+                    date,
+                    last_check: curr_datetime(), // Should be recent enough.
+                };
+                (Some((date, true)), Some(latest_date_info))
+            }
+            GetCacheState::Stale => {
+                let latest_date_info = LatestDateInfo {
+                    date,
+                    last_check: curr_datetime() - Duration::days(1), // Should be old enough.
+                };
+                (Some((date, false)), Some(latest_date_info))
+            }
+            GetCacheState::NotFound => (None, None),
+            GetCacheState::Fail => panic!("Invalid test parameter"),
+        };
+
+        // Set up the mock Redis command that the scraper is expected to request.
+        let cache_key =
+            serde_json::to_vec(LATEST_DATE_KEY).expect("Couldn't serialize mock cache key");
+        let cache_value = if let Some(value) = cache_entry {
+            serde_json::to_vec(&value)
+                .expect("Couldn't serialize mock cache value")
+                .into_redis_value()
+        } else {
+            Value::Nil
+        };
+        let retrieval_cmd = MockCmd::new(Cmd::get(cache_key), Ok(cache_value));
+
+        // Max pool size is one, since only one connection is needed.
+        let db = MockPool::new(1);
+        if let Err((_, err)) = db.add(MockRedisConnection::new([retrieval_cmd])).await {
+            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+        };
+
+        let scraper = LatestDateScraper::new();
+        let result = scraper
+            .get_cached_data(&Some(db), &())
+            .await
+            .expect("Failed to get latest date from cache");
+        assert_eq!(
+            result, expected,
+            "Retrieved the wrong latest date from cache"
+        );
+    }
 
     #[test_case(true; "is latest")]
     #[test_case(false; "is not latest")]
