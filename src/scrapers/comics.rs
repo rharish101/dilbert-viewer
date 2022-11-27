@@ -288,6 +288,37 @@ mod tests {
         );
     }
 
+    #[actix_web::test]
+    /// Test cache storage of a comic.
+    async fn test_comic_cache_storage() {
+        // Set up the entry to store in the mock cache.
+        let date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+        let comic_data = ComicData {
+            title: String::new(),
+            img_url: String::new(),
+            img_width: 0,
+            img_height: 0,
+        };
+
+        // Set up the mock Redis command that the scraper is expected to request.
+        let cache_key = serde_json::to_vec(&date).expect("Couldn't serialize mock cache key");
+        let cache_value =
+            serde_json::to_vec(&comic_data).expect("Couldn't serialize mock cache value");
+        let storage_cmd = MockCmd::new(Cmd::set(cache_key, cache_value), Ok(Value::Okay));
+
+        // Max pool size is one, since only one connection is needed.
+        let db = MockPool::new(1);
+        if let Err((_, err)) = db.add(MockRedisConnection::new([storage_cmd])).await {
+            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+        };
+
+        let scraper = ComicScraper::new();
+        scraper
+            .cache_data(&Some(db), &comic_data, &date)
+            .await
+            .expect("Failed to set comic data in cache");
+    }
+
     #[test_case((2000, 1, 1), false, ("", "https://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
     #[test_case((2020, 1, 1), false, ("Rfp Process", "https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
     #[test_case((2000, 1, 1), true, ("", "", 0, 0); "missing")]
