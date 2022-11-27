@@ -17,6 +17,7 @@
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use std::cmp::{max, min};
 use std::path::Path;
+use std::rc::Rc;
 
 use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
@@ -33,26 +34,20 @@ use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 use crate::utils::str_to_date;
 
-pub struct Viewer<T> {
-    /// The pool of connections to the database
-    db: Option<T>,
-    /// The HTTP client for connecting to the server
-    http_client: HttpClient,
-
+pub struct Viewer<T: RedisPool> {
     /// The scraper for comics given date
-    comic_scraper: ComicScraper,
+    comic_scraper: ComicScraper<T>,
     /// The scraper for the latest date
-    latest_date_scraper: LatestDateScraper,
+    latest_date_scraper: LatestDateScraper<T>,
 }
 
-impl<T: RedisPool> Viewer<T> {
+impl<T: RedisPool + Clone> Viewer<T> {
     /// Initialize all necessary stuff for the viewer.
     pub fn new(db: Option<T>, base_url: String) -> Self {
+        let http_client = Rc::new(HttpClient::new(base_url));
         Self {
-            db,
-            http_client: HttpClient::new(base_url),
-            comic_scraper: ComicScraper::new(),
-            latest_date_scraper: LatestDateScraper::new(),
+            comic_scraper: ComicScraper::new(db.clone(), http_client.clone()),
+            latest_date_scraper: LatestDateScraper::new(db, http_client),
         }
     }
 
@@ -60,10 +55,8 @@ impl<T: RedisPool> Viewer<T> {
     async fn serve_comic_raw(&self, date: NaiveDate, show_latest: bool) -> AppResult<HttpResponse> {
         // Execute both in parallel, as they are independent of each other.
         let (comic_data_res, latest_comic_res) = futures::join!(
-            self.comic_scraper
-                .get_comic_data(&self.db, &self.http_client, &date),
-            self.latest_date_scraper
-                .get_latest_date(&self.db, &self.http_client)
+            self.comic_scraper.get_comic_data(&date),
+            self.latest_date_scraper.get_latest_date()
         );
         let mut latest_comic = latest_comic_res?;
 
@@ -77,10 +70,7 @@ impl<T: RedisPool> Viewer<T> {
                     "No comic found for {date}, instead displaying the latest comic ({})",
                     latest_comic
                 );
-                let comic_data = self
-                    .comic_scraper
-                    .get_comic_data(&self.db, &self.http_client, &latest_comic)
-                    .await?;
+                let comic_data = self.comic_scraper.get_comic_data(&latest_comic).await?;
                 if let Some(comic_data) = comic_data {
                     (comic_data, latest_comic)
                 } else {
@@ -100,9 +90,7 @@ impl<T: RedisPool> Viewer<T> {
         if latest_comic < date {
             latest_comic = date;
             // Cache the new value of the latest comic date
-            self.latest_date_scraper
-                .update_latest_date(&self.db, &date)
-                .await?;
+            self.latest_date_scraper.update_latest_date(&date).await?;
         };
 
         serve_template(date, &comic_data, latest_comic)

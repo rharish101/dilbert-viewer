@@ -15,6 +15,8 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
+use std::rc::Rc;
+
 use async_trait::async_trait;
 use awc::http::StatusCode;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
@@ -41,54 +43,40 @@ struct LatestDateInfo {
 /// Struct to scrape the date of the latest Dilbert comic.
 ///
 /// This scraper returns that date.
-pub struct LatestDateScraper {}
+pub struct LatestDateScraper<T: RedisPool> {
+    db: Option<T>,
+    http_client: Rc<HttpClient>,
+}
 
-impl LatestDateScraper {
+impl<T: RedisPool> LatestDateScraper<T> {
     /// Initialize a latest date scraper.
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(db: Option<T>, http_client: Rc<HttpClient>) -> Self {
+        Self { db, http_client }
     }
 
     /// Retrieve the date of the latest comic.
-    ///
-    /// # Arguments
-    /// * `db` - The pool of connections to the DB
-    /// * `http_client` - The HTTP client for scraping from "dilbert.com"
-    pub async fn get_latest_date(
-        &self,
-        db: &Option<impl RedisPool>,
-        http_client: &HttpClient,
-    ) -> AppResult<NaiveDate> {
-        self.get_data(db, http_client, &()).await
+    pub async fn get_latest_date(&self) -> AppResult<NaiveDate> {
+        self.get_data(&()).await
     }
 
     /// Update the latest date in the cache.
     ///
     /// # Arguments
-    /// * `db` - The pool of connections to the DB
     /// * `date` - The date of the latest comic
-    pub async fn update_latest_date(
-        &self,
-        db: &Option<impl RedisPool>,
-        date: &NaiveDate,
-    ) -> AppResult<()> {
-        self.cache_data(db, date, &()).await
+    pub async fn update_latest_date(&self, date: &NaiveDate) -> AppResult<()> {
+        self.cache_data(date, &()).await
     }
 }
 
 #[async_trait(?Send)]
-impl Scraper<NaiveDate, ()> for LatestDateScraper {
+impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
     /// Get the cached latest date from the database.
     ///
     /// In the rare case that the latest date entry wasn't found in the cache, None is returned.
     /// The boolean return flag indicates whether the cache entry is stale (i.e. it was updated a
     /// long time back) or not.
-    async fn get_cached_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        _reference: &(),
-    ) -> AppResult<Option<(NaiveDate, bool)>> {
-        let mut conn = if let Some(db) = db {
+    async fn get_cached_data(&self, _ref: &()) -> AppResult<Option<(NaiveDate, bool)>> {
+        let mut conn = if let Some(db) = &self.db {
             db.get().await?
         } else {
             return Ok(None);
@@ -111,13 +99,8 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
     }
 
     /// Cache the latest date into the database.
-    async fn cache_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        date: &NaiveDate,
-        _reference: &(),
-    ) -> AppResult<()> {
-        let mut conn = if let Some(db) = db {
+    async fn cache_data(&self, date: &NaiveDate, _ref: &()) -> AppResult<()> {
+        let mut conn = if let Some(db) = &self.db {
             db.get().await?
         } else {
             return Ok(());
@@ -134,14 +117,14 @@ impl Scraper<NaiveDate, ()> for LatestDateScraper {
     }
 
     /// Scrape the date of the latest comic from "dilbert.com".
-    async fn scrape_data(&self, http_client: &HttpClient, _reference: &()) -> AppResult<NaiveDate> {
+    async fn scrape_data(&self, _ref: &()) -> AppResult<NaiveDate> {
         // If there is no comic for this date yet, "dilbert.com" will auto-redirect to the
         // homepage.
         let today = curr_date();
         let path = format!("{}{}", SRC_COMIC_PREFIX, curr_date().format(SRC_DATE_FMT));
 
         info!("Trying date \"{}\" for latest comic", today);
-        let mut resp = http_client.get(&path).send().await?;
+        let mut resp = self.http_client.get(&path).send().await?;
         let status = resp.status();
 
         match status {
@@ -232,9 +215,11 @@ mod tests {
             panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
         };
 
-        let scraper = LatestDateScraper::new();
+        // The HTTP client shouldn't be used, so make the base URL empty.
+        let http_client = Rc::new(HttpClient::new(String::new()));
+        let scraper = LatestDateScraper::new(Some(db), http_client);
         let result = scraper
-            .get_cached_data(&Some(db), &())
+            .get_cached_data(&())
             .await
             .expect("Failed to get latest date from cache");
         assert_eq!(
@@ -252,9 +237,12 @@ mod tests {
     /// * `is_latest` - Whether the current date is to be indicated as the date of the latest comic
     async fn test_latest_date_scraping(is_latest: bool) {
         let mock_server = MockServer::start().await;
-        let http_client = HttpClient::new(mock_server.uri());
+        let http_client = Rc::new(HttpClient::new(mock_server.uri()));
         let date = curr_date();
-        let scraper = LatestDateScraper::new();
+
+        // The DB shouldn't be used, so use a pool with no connections.
+        let db = Some(MockPool::new(0));
+        let scraper = LatestDateScraper::new(db, http_client);
 
         let expected = if is_latest {
             date
@@ -282,7 +270,7 @@ mod tests {
 
         // The scraping should fail if and only if the server redirects.
         let result = scraper
-            .scrape_data(&http_client, &())
+            .scrape_data(&())
             .await
             .expect("Failed to scrape latest date");
         assert_eq!(result, expected, "Scraped the wrong latest date");
