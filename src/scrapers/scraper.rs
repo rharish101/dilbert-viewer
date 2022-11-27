@@ -18,12 +18,10 @@
 use async_trait::async_trait;
 use log::{error, info, warn};
 
-use crate::client::HttpClient;
-use crate::db::RedisPool;
 use crate::errors::AppResult;
 
 #[async_trait(?Send)]
-pub trait Scraper<Data, Ref> {
+pub trait Scraper<D, R> {
     /// Retrieve cached data from the database.
     ///
     /// If data is not found in the cache, None should be returned. Otherwise, this returns the
@@ -31,44 +29,31 @@ pub trait Scraper<Data, Ref> {
     /// updated) or not.
     ///
     /// # Arguments:
-    /// * `db` - The pool of connections to the DB
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn get_cached_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        reference: &Ref,
-    ) -> AppResult<Option<(Data, bool)>>;
+    async fn get_cached_data(&self, reference: &R) -> AppResult<Option<(D, bool)>>;
 
     /// Cache data into the database.
     ///
     /// # Arguments:
-    /// * `db` - The pool of connections to the DB
     /// * `data` - The data that is to be cached
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn cache_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        data: &Data,
-        reference: &Ref,
-    ) -> AppResult<()>;
+    async fn cache_data(&self, data: &D, reference: &R) -> AppResult<()>;
 
     /// Scrape data from the source.
     ///
     /// # Arguments:
-    /// * `http_client` - The HTTP client for scraping from the source
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn scrape_data(&self, http_client: &HttpClient, reference: &Ref) -> AppResult<Data>;
+    async fn scrape_data(&self, reference: &R) -> AppResult<D>;
 
     /// Cache data while handling exceptions.
     ///
     /// Since caching failure is not fatal, we simply log it and ignore it.
     ///
     /// # Arguments:
-    /// * `db` - The pool of connections to the DB
     /// * `data` - The data that is to be cached
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn safely_cache_data(&self, db: &Option<impl RedisPool>, data: &Data, reference: &Ref) {
-        if let Err(err) = self.cache_data(db, data, reference).await {
+    async fn safely_cache_data(&self, data: &D, reference: &R) {
+        if let Err(err) = self.cache_data(data, reference).await {
             error!("Error caching data: {}", err);
         }
     }
@@ -76,16 +61,9 @@ pub trait Scraper<Data, Ref> {
     /// Retrieve the data, either from the source or from cache.
     ///
     /// # Arguments
-    /// * `db` - The pool of connections to the DB
-    /// * `http_client` - The HTTP client for scraping from the source
     /// * `reference` - The reference to the data that is to be retrieved
-    async fn get_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        http_client: &HttpClient,
-        reference: &Ref,
-    ) -> AppResult<Data> {
-        let stale_data = match self.get_cached_data(db, reference).await {
+    async fn get_data(&self, reference: &R) -> AppResult<D> {
+        let stale_data = match self.get_cached_data(reference).await {
             Ok(Some((data, true))) => {
                 info!("Successful retrieval from cache");
                 return Ok(data);
@@ -100,10 +78,10 @@ pub trait Scraper<Data, Ref> {
         };
 
         info!("Couldn't fetch fresh data from cache; trying to scrape");
-        let err = match self.scrape_data(http_client, reference).await {
+        let err = match self.scrape_data(reference).await {
             Ok(data) => {
                 info!("Scraped data from source");
-                self.safely_cache_data(db, &data, reference).await;
+                self.safely_cache_data(&data, reference).await;
                 info!("Cached scraped data");
                 return Ok(data);
             }
@@ -151,7 +129,6 @@ mod tests {
 
     use test_case::test_case;
 
-    use crate::db::mock::MockPool;
     use crate::errors::AppError;
 
     /// Mock struct for testing the trait `Scraper`.
@@ -168,11 +145,7 @@ mod tests {
 
     #[async_trait(?Send)]
     impl Scraper<i32, ()> for MockScraper {
-        async fn get_cached_data(
-            &self,
-            _db: &Option<impl RedisPool>,
-            _ref: &(),
-        ) -> AppResult<Option<(i32, bool)>> {
+        async fn get_cached_data(&self, _ref: &()) -> AppResult<Option<(i32, bool)>> {
             match self.retrieve_status {
                 GetCacheState::Fresh => Ok(Some((self.expected, true))),
                 GetCacheState::Stale => Ok(Some((self.expected, false))),
@@ -181,12 +154,7 @@ mod tests {
             }
         }
 
-        async fn cache_data(
-            &self,
-            _db: &Option<impl RedisPool>,
-            _data: &i32,
-            _ref: &(),
-        ) -> AppResult<()> {
+        async fn cache_data(&self, _data: &i32, _ref: &()) -> AppResult<()> {
             if self.storage_works {
                 Ok(())
             } else {
@@ -194,7 +162,7 @@ mod tests {
             }
         }
 
-        async fn scrape_data(&self, _http: &HttpClient, _ref: &()) -> AppResult<i32> {
+        async fn scrape_data(&self, _ref: &()) -> AppResult<i32> {
             if self.scrape_works {
                 Ok(self.expected)
             } else {
@@ -230,11 +198,9 @@ mod tests {
             scrape_works,
             storage_works,
         };
-        let http_client = HttpClient::new(String::new()); // The client should never be used anyway.
-        let db: Option<MockPool> = None;
 
         let result = mock_scraper
-            .get_data(&db, &http_client, &())
+            .get_data(&())
             .await
             .expect("Data retrieval from scraper crashed");
         assert_eq!(result, expected, "Scraper returned the wrong data");

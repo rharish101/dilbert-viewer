@@ -15,6 +15,8 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
+use std::rc::Rc;
+
 use async_trait::async_trait;
 use awc::http::StatusCode;
 use chrono::NaiveDate;
@@ -47,27 +49,23 @@ pub struct ComicData {
 /// Struct for a comic scraper
 ///
 /// This scraper takes a date as input and returns the info about the comic.
-pub struct ComicScraper {}
+pub struct ComicScraper<T: RedisPool> {
+    db: Option<T>,
+    http_client: Rc<HttpClient>,
+}
 
-impl ComicScraper {
+impl<T: RedisPool> ComicScraper<T> {
     /// Initialize a comics scraper.
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(db: Option<T>, http_client: Rc<HttpClient>) -> Self {
+        Self { db, http_client }
     }
 
     /// Retrieve the data for the requested comic.
     ///
     /// # Arguments
-    /// * `db` - The pool of connections to the DB
-    /// * `http_client` - The HTTP client for scraping from the source
     /// * `date` - The date of the requested comic
-    pub async fn get_comic_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        http_client: &HttpClient,
-        date: &NaiveDate,
-    ) -> AppResult<Option<ComicData>> {
-        match self.get_data(db, http_client, date).await {
+    pub async fn get_comic_data(&self, date: &NaiveDate) -> AppResult<Option<ComicData>> {
+        match self.get_data(date).await {
             Ok(comic_data) => Ok(Some(comic_data)),
             Err(AppError::NotFound(_)) => Ok(None),
             Err(err) => Err(err),
@@ -76,16 +74,12 @@ impl ComicScraper {
 }
 
 #[async_trait(?Send)]
-impl Scraper<ComicData, NaiveDate> for ComicScraper {
+impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
     /// Get the cached comic data from the database.
     ///
     /// If the comic date entry isn't in the cache, None is returned.
-    async fn get_cached_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        date: &NaiveDate,
-    ) -> AppResult<Option<(ComicData, bool)>> {
-        let mut conn = if let Some(db) = db {
+    async fn get_cached_data(&self, date: &NaiveDate) -> AppResult<Option<(ComicData, bool)>> {
+        let mut conn = if let Some(db) = &self.db {
             db.get().await?
         } else {
             return Ok(None);
@@ -98,13 +92,8 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
     }
 
     /// Cache the comic data into the database.
-    async fn cache_data(
-        &self,
-        db: &Option<impl RedisPool>,
-        comic_data: &ComicData,
-        date: &NaiveDate,
-    ) -> AppResult<()> {
-        let mut conn = if let Some(db) = db {
+    async fn cache_data(&self, comic_data: &ComicData, date: &NaiveDate) -> AppResult<()> {
+        let mut conn = if let Some(db) = &self.db {
             db.get().await?
         } else {
             return Ok(());
@@ -116,13 +105,9 @@ impl Scraper<ComicData, NaiveDate> for ComicScraper {
     }
 
     /// Scrape the comic data of the requested date from the source.
-    async fn scrape_data(
-        &self,
-        http_client: &HttpClient,
-        date: &NaiveDate,
-    ) -> AppResult<ComicData> {
+    async fn scrape_data(&self, date: &NaiveDate) -> AppResult<ComicData> {
         let path = format!("{}{}", SRC_COMIC_PREFIX, date.format(SRC_DATE_FMT));
-        let mut resp = http_client.get(&path).send().await?;
+        let mut resp = self.http_client.get(&path).send().await?;
         let status = resp.status();
 
         match status {
@@ -277,9 +262,11 @@ mod tests {
             panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
         };
 
-        let scraper = ComicScraper::new();
+        // The HTTP client shouldn't be used, so make the base URL empty.
+        let http_client = Rc::new(HttpClient::new(String::new()));
+        let scraper = ComicScraper::new(Some(db), http_client);
         let result = scraper
-            .get_cached_data(&Some(db), &date)
+            .get_cached_data(&date)
             .await
             .expect("Failed to get comic data from cache");
         assert_eq!(
@@ -312,9 +299,11 @@ mod tests {
             panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
         };
 
-        let scraper = ComicScraper::new();
+        // The HTTP client shouldn't be used, so make the base URL empty.
+        let http_client = Rc::new(HttpClient::new(String::new()));
+        let scraper = ComicScraper::new(Some(db), http_client);
         scraper
-            .cache_data(&Some(db), &comic_data, &date)
+            .cache_data(&comic_data, &date)
             .await
             .expect("Failed to set comic data in cache");
     }
@@ -336,10 +325,13 @@ mod tests {
         comic_data: (&str, &str, i32, i32),
     ) {
         let mock_server = MockServer::start().await;
-        let http_client = HttpClient::new(mock_server.uri());
+        let http_client = Rc::new(HttpClient::new(mock_server.uri()));
         let date = NaiveDate::from_ymd_opt(date_ymd.0, date_ymd.1, date_ymd.2)
             .expect("Invalid test parameters");
-        let scraper = ComicScraper::new();
+
+        // The DB shouldn't be used, so use a pool with no connections.
+        let db = Some(MockPool::new(0));
+        let scraper = ComicScraper::new(db, http_client);
 
         let expected = ComicData {
             title: comic_data.0.into(),
@@ -369,7 +361,7 @@ mod tests {
             .await;
 
         // The scraping should fail if and only if the server redirects.
-        if let Ok(result) = scraper.scrape_data(&http_client, &date).await {
+        if let Ok(result) = scraper.scrape_data(&date).await {
             if missing {
                 panic!("Somehow scraped a missing comic");
             } else {
