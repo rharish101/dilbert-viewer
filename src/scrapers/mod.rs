@@ -19,7 +19,12 @@ mod comics;
 mod latest;
 mod scraper;
 
+use mockall_double::double;
+
 // Re-export for convenience.
-pub use comics::{ComicData, ComicScraper};
+pub use comics::ComicData;
+#[double]
+pub use comics::ComicScraper;
+#[double]
 pub use latest::LatestDateScraper;
 pub use scraper::Scraper;

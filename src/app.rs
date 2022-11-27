@@ -34,14 +34,14 @@ use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 use crate::utils::str_to_date;
 
-pub struct Viewer<T: RedisPool> {
+pub struct Viewer<T: RedisPool + 'static> {
     /// The scraper for comics given date
     comic_scraper: ComicScraper<T>,
     /// The scraper for the latest date
     latest_date_scraper: LatestDateScraper<T>,
 }
 
-impl<T: RedisPool + Clone> Viewer<T> {
+impl<T: RedisPool + Clone + 'static> Viewer<T> {
     /// Initialize all necessary stuff for the viewer.
     pub fn new(db: Option<T>, base_url: String) -> Self {
         let http_client = Rc::new(HttpClient::new(base_url));
@@ -297,6 +297,8 @@ mod tests {
     };
     use test_case::test_case;
 
+    use crate::db::mock::MockPool;
+
     /// Path to the directory where test HTML files are stored
     const HTML_TEST_CASE_PATH: &str = "testdata/html";
 
@@ -468,5 +470,104 @@ mod tests {
         let body_utf8 = std::str::from_utf8(&body).expect("Response body not UTF-8");
         // NOTE: This doesn't guarantee that the CSS is valid.
         minifier::css::minify(body_utf8).expect("Response body not valid CSS");
+    }
+
+    /// Enum for the state of `Viewer::get_comic_info`.
+    enum GetComicInfoState {
+        /// Comic info and latest date are valid.
+        Normal,
+        /// Comic info is valid, but latest date is older than comic date.
+        StaleLatestDate,
+        /// Comic info is missing, but redirects to latest date as fallback.
+        RedirectToLatest,
+        /// Comic info is missing, and no redirection is to be done.
+        MissingComic,
+    }
+
+    #[test_case(GetComicInfoState::Normal; "comic exists, fresh latest date")]
+    #[test_case(GetComicInfoState::StaleLatestDate; "comic exists, stale latest date")]
+    #[test_case(GetComicInfoState::RedirectToLatest; "missing comic, latest requested")]
+    #[test_case(GetComicInfoState::MissingComic; "missing comic, latest not requested")]
+    #[actix_web::test]
+    /// Test the comic info retrieval by the viewer.
+    ///
+    /// # Arguments
+    /// * `state` - The state denoting the behaviour of the viewer's scrapers
+    async fn test_get_comic_info(state: GetComicInfoState) {
+        let comic_date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+        let comic_data = ComicData {
+            title: String::new(),
+            img_url: String::new(),
+            img_width: 0,
+            img_height: 0,
+        };
+
+        // Set up the expected and the cached latest dates.
+        let (expected_latest_date, cached_latest_date) =
+            if let GetComicInfoState::StaleLatestDate = state {
+                // The viewer cannot know of any other latest date if the one it knows about is older
+                // than the comic date, so the latest it knows of is the comic date.
+                (comic_date, comic_date - Duration::days(1))
+            } else {
+                let date = if let GetComicInfoState::RedirectToLatest = state {
+                    // Redirection to latest only makes sense when the requested comic is newer
+                    // than the latest date.
+                    comic_date - Duration::days(1)
+                } else {
+                    NaiveDate::from_ymd_opt(2020, 1, 1).unwrap()
+                };
+                (date, date)
+            };
+
+        // Set up the mock comic scraper.
+        let mut mock_comic_scraper = ComicScraper::<MockPool>::default();
+        let expected_comic_data = Some(comic_data.clone());
+        let comic_exists = matches!(
+            state,
+            GetComicInfoState::Normal | GetComicInfoState::StaleLatestDate
+        );
+        mock_comic_scraper
+            .expect_get_comic_data()
+            // This should only be called once, unless the viewer fails to find the requested comic
+            // and the latest date is requested as a fallback.
+            .times(if let GetComicInfoState::RedirectToLatest = state {
+                2
+            } else {
+                1
+            })
+            .returning(move |date| {
+                if (date == &comic_date && comic_exists) || date == &expected_latest_date {
+                    Ok(expected_comic_data.clone())
+                } else {
+                    Ok(None)
+                }
+            });
+
+        // Set up the mock latest date scraper.
+        let mut mock_latest_date_scraper = LatestDateScraper::<MockPool>::default();
+        mock_latest_date_scraper
+            .expect_get_latest_date()
+            .return_once(move || Ok(cached_latest_date));
+        mock_latest_date_scraper
+            .expect_update_latest_date()
+            .return_once(|_| Ok(()));
+
+        let viewer = Viewer {
+            comic_scraper: mock_comic_scraper,
+            latest_date_scraper: mock_latest_date_scraper,
+        };
+
+        let show_latest = matches!(state, GetComicInfoState::RedirectToLatest);
+        match viewer.get_comic_info(comic_date, show_latest).await {
+            Ok((result_data, result_latest_date)) => {
+                assert_eq!(result_data, comic_data, "Viewer returned wrong comic data");
+                assert_eq!(
+                    result_latest_date, expected_latest_date,
+                    "Viewer returned wrong latest date"
+                );
+            }
+            Err(AppError::NotFound(..)) if !show_latest => {}
+            Err(err) => panic!("Viewer failed to get info: {}", err),
+        };
     }
 }

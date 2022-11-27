@@ -21,6 +21,8 @@ use async_trait::async_trait;
 use awc::http::StatusCode;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use log::{debug, error, info};
+#[cfg(test)]
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 
 use crate::client::HttpClient;
@@ -48,13 +50,15 @@ pub struct LatestDateScraper<T: RedisPool> {
     http_client: Rc<HttpClient>,
 }
 
-impl<T: RedisPool> LatestDateScraper<T> {
+#[cfg_attr(test, automock)]
+impl<T: RedisPool + 'static> LatestDateScraper<T> {
     /// Initialize a latest date scraper.
     pub fn new(db: Option<T>, http_client: Rc<HttpClient>) -> Self {
         Self { db, http_client }
     }
 
     /// Retrieve the date of the latest comic.
+    #[cfg_attr(test, allow(dead_code))]
     pub async fn get_latest_date(&self) -> AppResult<NaiveDate> {
         self.get_data(&()).await
     }
@@ -63,6 +67,7 @@ impl<T: RedisPool> LatestDateScraper<T> {
     ///
     /// # Arguments
     /// * `date` - The date of the latest comic
+    #[cfg_attr(test, allow(dead_code))]
     pub async fn update_latest_date(&self, date: &NaiveDate) -> AppResult<()> {
         self.cache_data(date, &()).await
     }

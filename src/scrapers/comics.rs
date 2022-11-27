@@ -22,6 +22,8 @@ use awc::http::StatusCode;
 use chrono::NaiveDate;
 use html_escape::decode_html_entities;
 use log::{error, info};
+#[cfg(test)]
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 
@@ -31,7 +33,7 @@ use crate::db::{RedisPool, SerdeAsyncCommands};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct ComicData {
     /// The title of the comic
     pub title: String,
@@ -49,12 +51,13 @@ pub struct ComicData {
 /// Struct for a comic scraper
 ///
 /// This scraper takes a date as input and returns the info about the comic.
-pub struct ComicScraper<T: RedisPool> {
+pub struct ComicScraper<T: RedisPool + 'static> {
     db: Option<T>,
     http_client: Rc<HttpClient>,
 }
 
-impl<T: RedisPool> ComicScraper<T> {
+#[cfg_attr(test, automock)]
+impl<T: RedisPool + 'static> ComicScraper<T> {
     /// Initialize a comics scraper.
     pub fn new(db: Option<T>, http_client: Rc<HttpClient>) -> Self {
         Self { db, http_client }
@@ -64,6 +67,7 @@ impl<T: RedisPool> ComicScraper<T> {
     ///
     /// # Arguments
     /// * `date` - The date of the requested comic
+    #[cfg_attr(test, allow(dead_code))]
     pub async fn get_comic_data(&self, date: &NaiveDate) -> AppResult<Option<ComicData>> {
         match self.get_data(date).await {
             Ok(comic_data) => Ok(Some(comic_data)),
