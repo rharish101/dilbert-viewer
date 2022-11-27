@@ -35,5 +35,7 @@ lto = true
 
 [dev-dependencies]
 content-security-policy = "0.4.2"
+deadpool = "0.9.5"
+redis-test = { version = "0.1.1", features = ["aio"] }
 test-case = "2.2.2"
 wiremock = "0.5.15"

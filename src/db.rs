@@ -90,3 +90,31 @@ pub async fn get_db_pool() -> Result<deadpool_redis::Pool, DbInitError> {
         .wait_timeout(Some(Duration::from_secs(DB_TIMEOUT)));
     Ok(pool_builder.build()?)
 }
+
+#[cfg(test)]
+pub mod mock {
+    use super::*;
+
+    use deadpool::{
+        managed::{PoolError as MPoolError, TimeoutType},
+        unmanaged::{Object, Pool as UmPool, PoolError as UmPoolError},
+    };
+    use redis_test::MockRedisConnection;
+
+    /// A pool for a mock Redis connection.
+    pub type MockPool = UmPool<MockRedisConnection>;
+
+    // Implement it for `redis-test`.
+    #[async_trait]
+    impl RedisPool for MockPool {
+        type ConnType = MockRedisConnection;
+        async fn get(&self) -> Result<Self::ConnType, PoolError> {
+            match self.get().await {
+                Ok(conn) => Ok(Object::take(conn)),
+                Err(UmPoolError::Timeout) => Err(MPoolError::Timeout(TimeoutType::Wait)),
+                Err(UmPoolError::Closed) => Err(MPoolError::Closed),
+                Err(UmPoolError::NoRuntimeSpecified) => Err(MPoolError::NoRuntimeSpecified),
+            }
+        }
+    }
+}

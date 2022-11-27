@@ -807,6 +807,7 @@ dependencies = [
  "awc",
  "chrono",
  "content-security-policy",
+ "deadpool",
  "deadpool-redis",
  "futures",
  "html-escape",
@@ -816,6 +817,7 @@ dependencies = [
  "pretty_env_logger",
  "rand 0.8.5",
  "redis",
+ "redis-test",
  "serde",
  "serde_json",
  "test-case",
@@ -1806,6 +1808,16 @@ dependencies = [
  "tokio-native-tls",
  "tokio-util",
  "url",
+]
+
+[[package]]
+name = "redis-test"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e9ceb100979db7292de8a3d4ecdde659cccc85133303ea0741e1618a5bd73df"
+dependencies = [
+ "futures",
+ "redis",
 ]
 
 [[package]]
