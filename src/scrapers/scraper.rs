@@ -130,7 +130,23 @@ pub trait Scraper<Data, Ref> {
 }
 
 #[cfg(test)]
+pub mod mock {
+    /// Enum for the state of the mock struct during cache retrieval.
+    pub enum GetCacheState {
+        /// Retrieve a fresh value.
+        Fresh,
+        /// Retrieve a stale value.
+        Stale,
+        /// Value not found in cache.
+        NotFound,
+        /// Retrieval crashes.
+        Fail,
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::mock::GetCacheState;
     use super::*;
 
     use test_case::test_case;
@@ -148,14 +164,6 @@ mod tests {
         scrape_works: bool,
         /// Whether cache storage works.
         storage_works: bool,
-    }
-
-    /// Enum for the state of the mock struct during cache retrieval.
-    enum GetCacheState {
-        Fresh,
-        Stale,
-        NotFound,
-        Fail,
     }
 
     #[async_trait(?Send)]
