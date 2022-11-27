@@ -127,47 +127,19 @@ mod tests {
     use super::mock::GetCacheState;
     use super::*;
 
+    use mockall::mock;
     use test_case::test_case;
 
     use crate::errors::AppError;
 
-    /// Mock struct for testing the trait `Scraper`.
-    struct MockScraper {
-        /// Expected data to be "scraped".
-        expected: i32,
-        /// Status for the cache retrieval.
-        retrieve_status: GetCacheState,
-        /// Whether scraping works.
-        scrape_works: bool,
-        /// Whether cache storage works.
-        storage_works: bool,
-    }
+    mock! {
+        TestScraper {}
 
-    #[async_trait(?Send)]
-    impl Scraper<i32, ()> for MockScraper {
-        async fn get_cached_data(&self, _ref: &()) -> AppResult<Option<(i32, bool)>> {
-            match self.retrieve_status {
-                GetCacheState::Fresh => Ok(Some((self.expected, true))),
-                GetCacheState::Stale => Ok(Some((self.expected, false))),
-                GetCacheState::NotFound => Ok(None),
-                GetCacheState::Fail => Err(AppError::Internal("Manual error".into())),
-            }
-        }
-
-        async fn cache_data(&self, _data: &i32, _ref: &()) -> AppResult<()> {
-            if self.storage_works {
-                Ok(())
-            } else {
-                Err(AppError::Internal("Manual error".into()))
-            }
-        }
-
-        async fn scrape_data(&self, _ref: &()) -> AppResult<i32> {
-            if self.scrape_works {
-                Ok(self.expected)
-            } else {
-                Err(AppError::Internal("Manual error".into()))
-            }
+        #[async_trait(?Send)]
+        impl Scraper<i32, ()> for TestScraper {
+            async fn get_cached_data(&self, reference: &()) -> AppResult<Option<(i32, bool)>>;
+            async fn cache_data(&self, data: &i32, reference: &()) -> AppResult<()>;
+            async fn scrape_data(&self, reference: &()) -> AppResult<i32>;
         }
     }
 
@@ -192,12 +164,35 @@ mod tests {
         storage_works: bool,
     ) {
         let expected = 1;
-        let mock_scraper = MockScraper {
-            expected,
-            retrieve_status,
-            scrape_works,
-            storage_works,
-        };
+        let mut mock_scraper = MockTestScraper::new();
+
+        // Mock cache retrieval.
+        mock_scraper
+            .expect_get_cached_data()
+            .return_once(move |_| match retrieve_status {
+                GetCacheState::Fresh => Ok(Some((expected, true))),
+                GetCacheState::Stale => Ok(Some((expected, false))),
+                GetCacheState::NotFound => Ok(None),
+                GetCacheState::Fail => Err(AppError::Internal("Manual error".into())),
+            });
+
+        // Mock cache storage.
+        mock_scraper.expect_cache_data().return_once(move |_, _| {
+            if storage_works {
+                Ok(())
+            } else {
+                Err(AppError::Internal("Manual error".into()))
+            }
+        });
+
+        // Mock scraping.
+        mock_scraper.expect_scrape_data().return_once(move |_| {
+            if scrape_works {
+                Ok(expected)
+            } else {
+                Err(AppError::Internal("Manual error".into()))
+            }
+        });
 
         let result = mock_scraper
             .get_data(&())
