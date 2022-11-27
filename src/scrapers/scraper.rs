@@ -135,6 +135,7 @@ mod tests {
 
     use test_case::test_case;
 
+    use crate::db::mock::MockPool;
     use crate::errors::AppError;
 
     /// Mock struct for testing the trait `Scraper`.
@@ -222,7 +223,7 @@ mod tests {
             storage_works,
         };
         let http_client = HttpClient::new(String::new()); // The client should never be used anyway.
-        let db: Option<deadpool_redis::Pool> = None;
+        let db: Option<MockPool> = None;
 
         let result = mock_scraper
             .get_data(&db, &http_client, &())
