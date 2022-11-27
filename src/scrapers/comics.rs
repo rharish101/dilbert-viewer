@@ -222,14 +222,71 @@ mod tests {
     use super::*;
 
     use actix_web::http::{Method, StatusCode};
+    use deadpool_redis::redis::{Cmd, Value};
+    use redis_test::{IntoRedisValue, MockCmd, MockRedisConnection};
     use test_case::test_case;
     use wiremock::{
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
     };
 
+    use crate::db::mock::MockPool;
+    use crate::scrapers::scraper::mock::GetCacheState;
+
     /// Path to the directory where test scraping files are stored
     const SCRAPING_TEST_CASE_PATH: &str = "testdata/scraping";
+
+    #[test_case(GetCacheState::Fresh; "comic in cache")]
+    #[test_case(GetCacheState::NotFound; "empty cache")]
+    #[actix_web::test]
+    /// Test cache retrieval of a comic.
+    ///
+    /// # Arguments
+    /// * `status` - Status for the cache retrieval
+    async fn test_comic_cache_retrieval(status: GetCacheState) {
+        // Set up the expected return values, and the entry to store in the mock cache.
+        let date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+        let comic_data = ComicData {
+            title: String::new(),
+            img_url: String::new(),
+            img_width: 0,
+            img_height: 0,
+        };
+        let expected = match status {
+            GetCacheState::Fresh => {
+                Some((comic_data, true)) // Entry should always be fresh.
+            }
+            GetCacheState::NotFound => None,
+            GetCacheState::Stale | GetCacheState::Fail => panic!("Invalid test parameter"),
+        };
+
+        // Set up the mock Redis command that the scraper is expected to request.
+        let cache_key = serde_json::to_vec(&date).expect("Couldn't serialize mock cache key");
+        let cache_value = if let Some((ref comic_data, _)) = expected {
+            serde_json::to_vec(&comic_data)
+                .expect("Couldn't serialize mock cache value")
+                .into_redis_value()
+        } else {
+            Value::Nil
+        };
+        let retrieval_cmd = MockCmd::new(Cmd::get(cache_key), Ok(cache_value));
+
+        // Max pool size is one, since only one connection is needed.
+        let db = MockPool::new(1);
+        if let Err((_, err)) = db.add(MockRedisConnection::new([retrieval_cmd])).await {
+            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+        };
+
+        let scraper = ComicScraper::new();
+        let result = scraper
+            .get_cached_data(&Some(db), &date)
+            .await
+            .expect("Failed to get comic data from cache");
+        assert_eq!(
+            result, expected,
+            "Retrieved the wrong comic data from cache"
+        );
+    }
 
     #[test_case((2000, 1, 1), false, ("", "https://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
     #[test_case((2020, 1, 1), false, ("Rfp Process", "https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
