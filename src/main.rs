@@ -18,6 +18,8 @@
 use std::env;
 use std::str::FromStr;
 
+use portpicker::{is_free, pick_unused_port};
+
 /// Default port when one isn't specified
 // This is Heroku's default port when running locally
 pub const PORT: u16 = 5000;
@@ -26,11 +28,20 @@ pub const PORT: u16 = 5000;
 async fn main() -> std::io::Result<()> {
     pretty_env_logger::init();
 
-    let host = format!(
-        "0.0.0.0:{}",
-        env::var("PORT").unwrap_or_else(|_| PORT.to_string())
-    );
-    log::info!("Starting server at {}", host);
+    let port = if let Some(port) = env::var("PORT")
+        .ok()
+        .and_then(|port| u16::from_str(&port).ok())
+    {
+        port
+    } else if is_free(PORT) {
+        PORT
+    } else if let Some(port) = pick_unused_port() {
+        port
+    } else {
+        panic!("Couldn't find any unused TCP port")
+    };
+    let host = format!("0.0.0.0:{}", port);
+    println!("Starting server at {}", host);
 
     // Currently the Rust buildpack for Heroku doesn't support WEB_CONCURRENCY, so only use it if
     // present.
