@@ -160,6 +160,7 @@ mod tests {
     use super::*;
 
     use actix_web::http::{Method, StatusCode};
+    use chrono::{DateTime, Utc};
     use deadpool_redis::redis::{Cmd, Value};
     use redis_test::{IntoRedisValue, MockCmd, MockRedisConnection};
     use test_case::test_case;
@@ -170,7 +171,7 @@ mod tests {
 
     use crate::db::mock::MockPool;
     use crate::scrapers::scraper::mock::GetCacheState;
-    use crate::utils::curr_date;
+    use crate::utils::{curr_date, mock::mock_time_file};
 
     #[test_case(GetCacheState::Fresh; "fresh retrieval")]
     #[test_case(GetCacheState::Stale; "stale retrieval")]
@@ -231,6 +232,42 @@ mod tests {
             result, expected,
             "Retrieved the wrong latest date from cache"
         );
+    }
+
+    #[actix_web::test]
+    /// Test cache storage of the latest date.
+    async fn test_latest_date_cache_storage() {
+        // Set up the entry to store in the mock cache.
+        let latest_date_info = LatestDateInfo {
+            date: NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+            last_check: curr_datetime(),
+        };
+
+        // Set up the mock Redis command that the scraper is expected to request.
+        let cache_key =
+            serde_json::to_vec(LATEST_DATE_KEY).expect("Couldn't serialize mock cache key");
+        let cache_value =
+            serde_json::to_vec(&latest_date_info).expect("Couldn't serialize mock cache value");
+        let storage_cmd = MockCmd::new(Cmd::set(cache_key, cache_value), Ok(Value::Okay));
+
+        // Max pool size is one, since only one connection is needed.
+        let db = MockPool::new(1);
+        if let Err((_, err)) = db.add(MockRedisConnection::new([storage_cmd])).await {
+            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+        };
+
+        // Mock the datetime with the expected `last_check` time, otherwise a different one will be
+        // used by the scraper during cache storage.
+        let faketime_file = mock_time_file(DateTime::from_utc(latest_date_info.last_check, Utc));
+        faketime::enable(&faketime_file);
+
+        // The HTTP client shouldn't be used, so make the base URL empty.
+        let http_client = Rc::new(HttpClient::new(String::new()));
+        let scraper = LatestDateScraper::new(Some(db), http_client);
+        scraper
+            .cache_data(&latest_date_info.date, &())
+            .await
+            .expect("Failed to set latest date in cache");
     }
 
     #[test_case(true; "is latest")]
