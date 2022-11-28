@@ -22,6 +22,7 @@ log = "0.4.14"
 minifier = "0.2.2"
 minify-html = { version = "0.10.2", package = "minify-html-onepass" }
 mockall_double = "0.3.0"
+portpicker = "0.1.1"
 pretty_env_logger = "0.4.0"
 rand = "0.8.4"
 redis = { version = "0.22.1", features = ["json", "tokio-native-tls-comp"] }
