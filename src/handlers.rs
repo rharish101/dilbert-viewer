@@ -19,7 +19,7 @@
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use std::path::Path;
 
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{get, http::header::LOCATION, web, HttpResponse, Responder};
 use chrono::{Duration, NaiveDate};
 use deadpool_redis::Pool;
 use rand::{thread_rng, Rng};
@@ -71,7 +71,7 @@ async fn random_comic() -> impl Responder {
 
     let location = format!("/{}", rand_date.format(SRC_DATE_FMT));
     HttpResponse::TemporaryRedirect()
-        .append_header(("Location", location))
+        .append_header((LOCATION, location))
         .finish()
 }
 
