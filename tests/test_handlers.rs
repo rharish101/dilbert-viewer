@@ -227,3 +227,45 @@ async fn test_random_comic() {
     // Close the server.
     handle.abort();
 }
+
+#[test_case("styles.css", Some("text/css"); "css")]
+#[test_case("robots.txt", Some("text/plain"); "misc")]
+#[test_case("foo", None; "non-existant")]
+#[actix_web::test]
+/// Test the static file service.
+///
+/// # Arguments
+/// * `path` - The URL path to the static file
+/// * `content_type` - The expected Content-Type header (None if the file doesn't exist)
+async fn test_static(path: &str, content_type: Option<&str>) {
+    let port = pick_unused_port().expect("Couldn't find an available port");
+    let host = format!("{}:{}", HOST, port);
+
+    // Start the server on a single thread.
+    // The static file service shouldn't make any request to "dilbert.com", so make the URL empty.
+    let handle = spawn(run(host.clone(), Some(String::new()), Some(1)));
+
+    let client = get_http_client();
+    let resp = client
+        .get(format!("http://{}/{}", host, path))
+        .send()
+        .await
+        .expect("Failed to send request to server");
+
+    // Close the server.
+    handle.abort();
+
+    assert_eq!(
+        resp.status(),
+        if content_type.is_some() {
+            StatusCode::OK
+        } else {
+            StatusCode::NOT_FOUND
+        },
+        "Unexpected response status",
+    );
+
+    if let Some(content_type) = content_type {
+        test_content_type(resp, content_type).await;
+    };
+}
