@@ -22,7 +22,7 @@ use awc::{
     http::{header::CONTENT_TYPE, Method, StatusCode},
     Client, ClientResponse,
 };
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use dilbert_viewer::run;
 use portpicker::pick_unused_port;
 use test_case::test_case;
@@ -108,4 +108,68 @@ async fn test_latest_comic(html_file_stem: &str) {
 
     assert_eq!(resp.status(), StatusCode::OK, "Response status is not OK",);
     test_content_type(resp, "text/html").await;
+}
+
+#[test_case(2000, 1, 1; "valid comic")]
+#[test_case(2000, 0, 0; "invalid comic")]
+#[actix_web::test]
+/// Test a comic webpage.
+///
+/// # Arguments
+/// * `year` - The year of the comic
+/// * `month` - The month of the comic
+/// * `day` - The day of the comic
+async fn test_comic(year: i32, month: u32, day: u32) {
+    let port = pick_unused_port().expect("Couldn't find an available port");
+    let host = format!("{}:{}", HOST, port);
+
+    let date_str = format!("{:04}-{:02}-{:02}", year, month, day);
+    let expected_status = if NaiveDate::from_ymd_opt(year, month, day).is_some() {
+        StatusCode::OK
+    } else {
+        StatusCode::NOT_FOUND
+    };
+
+    // Set up the mock server along with the HTML content.
+    let mock_server = MockServer::start().await;
+
+    // Mock the requested comic, only if it exists.
+    if let StatusCode::OK = expected_status {
+        let html =
+            tokio::fs::read_to_string(format!("{}/{}.html", SCRAPING_TEST_CASE_PATH, date_str))
+                .await
+                .expect("Couldn't get test page for scraping");
+        Mock::given(method(Method::GET.as_str()))
+            .and(path(format!("/strip/{}", date_str)))
+            .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html))
+            .mount(&mock_server)
+            .await;
+    }
+
+    // Mock the latest date.
+    let today = Utc::now().date_naive();
+    Mock::given(method(Method::GET.as_str()))
+        .and(path(format!("/strip/{}", today.format(SRC_DATE_FMT))))
+        // Response body shouldn't matter, so keep it empty.
+        .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()))
+        .mount(&mock_server)
+        .await;
+
+    // Start the server on a single thread.
+    let handle = spawn(run(host.clone(), Some(mock_server.uri()), Some(1)));
+
+    let client = get_http_client();
+    let resp = client
+        .get(format!("http://{}/{}", host, date_str))
+        .send()
+        .await
+        .expect("Failed to send request to server");
+
+    // Close the server.
+    handle.abort();
+
+    assert_eq!(resp.status(), expected_status, "Unexpected response status",);
+    if let StatusCode::OK = expected_status {
+        test_content_type(resp, "text/html").await;
+    }
 }
