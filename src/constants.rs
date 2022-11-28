@@ -50,9 +50,6 @@ pub const LATEST_DATE_REFRESH: i64 = 2;
 pub const SRC_BASE_URL: &str = "https://dilbert.com";
 /// URL path prefix for each comic on "dilbert.com"
 pub const SRC_COMIC_PREFIX: &str = "strip/";
-/// Default port when one isn't specified
-// This is Heroku's default port when running locally
-pub const PORT: u16 = 5000;
 /// Link to the public version of this app
 // Used in the OpenGraph tags
 pub const APP_URL: &str = "https://dilbert-viewer.herokuapp.com/";

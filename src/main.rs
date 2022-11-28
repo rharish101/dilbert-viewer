@@ -15,151 +15,28 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
-mod app;
-mod client;
-mod constants;
-mod db;
-mod errors;
-mod scrapers;
-mod templates;
-mod utils;
-
 use std::env;
-use std::io::Result as IOResult;
-use std::path::Path;
 use std::str::FromStr;
 
-use actix_files::Files;
-use actix_web::{
-    dev::{ServiceRequest, ServiceResponse},
-    get,
-    middleware::{Compress, DefaultHeaders, Logger},
-    web, App, Error as WebError, HttpResponse, HttpServer, Responder,
-};
-use chrono::{Duration, NaiveDate};
-use deadpool_redis::Pool;
-use log::{error, info};
-use rand::{thread_rng, Rng};
-
-use crate::app::{serve_404, serve_css, Viewer};
-use crate::constants::{
-    CSP, FIRST_COMIC, PORT, SRC_BASE_URL, SRC_DATE_FMT, STATIC_DIR, STATIC_URL,
-};
-use crate::db::get_db_pool;
-use crate::utils::{curr_date, str_to_date};
-
-/// Serve the latest comic.
-#[get("/")]
-async fn latest_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
-    // If there is no comic for this date yet, "dilbert.com" will redirect to the homepage. The
-    // code can handle this by instead showing the contents of the latest comic.
-    let today = curr_date();
-
-    // If there is no comic for this date yet, we don't want to raise a 404, so just show the exact
-    // latest date without a redirection (to preserve the URL and load faster).
-    viewer.serve_comic(today, true).await
-}
-
-/// Serve the comic requested in the given URL.
-#[get("/{year}-{month}-{day}")]
-async fn comic_page(
-    viewer: web::Data<Viewer<Pool>>,
-    path: web::Path<(i32, u32, u32)>,
-) -> impl Responder {
-    let (year, month, day) = path.into_inner();
-
-    // Check to see if the date is invalid.
-    if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
-        viewer.serve_comic(date, false).await
-    } else {
-        serve_404(None)
-    }
-}
-
-/// Serve a random comic.
-#[get("/random")]
-async fn random_comic() -> impl Responder {
-    let first = str_to_date(FIRST_COMIC, SRC_DATE_FMT)
-        .expect("Variable FIRST_COMIC not in format of variable SRC_DATE_FMT");
-    // There might not be any comic for this date yet, so exclude the latest date.
-    let latest = curr_date() - Duration::days(1);
-
-    let mut rng = thread_rng();
-    // Offset (in days) from the first date
-    let rand_offset = rng.gen_range(0..(latest - first).num_days());
-    let rand_date = first + Duration::days(rand_offset);
-
-    let location = format!("/{}", rand_date.format(SRC_DATE_FMT));
-    HttpResponse::TemporaryRedirect()
-        .append_header(("Location", location))
-        .finish()
-}
-
-/// Handle invalid URLs by sending 404s.
-///
-/// This is to be invoked when the actix static file service doesn't find a file.
-async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
-    let (http_req, _payload) = req.into_parts();
-    Ok(ServiceResponse::new(http_req, serve_404(None)))
-}
-
-/// Serve CSS after minification
-#[get("/{path}.css")]
-async fn minify_css(path: web::Path<String>) -> impl Responder {
-    let stem = path.into_inner();
-    let css_path = Path::new(STATIC_DIR).join(stem + ".css");
-    serve_css(&css_path).await
-}
+/// Default port when one isn't specified
+// This is Heroku's default port when running locally
+pub const PORT: u16 = 5000;
 
 #[actix_web::main]
-async fn main() -> IOResult<()> {
+async fn main() -> std::io::Result<()> {
     pretty_env_logger::init();
 
     let host = format!(
         "0.0.0.0:{}",
         env::var("PORT").unwrap_or_else(|_| PORT.to_string())
     );
-    info!("Starting server at {}", host);
-
-    // Create all worker-shared (i.e. thread-safe) structs here
-    let db_pool = match get_db_pool().await {
-        Ok(pool) => Some(pool),
-        Err(err) => {
-            error!(
-                "Couldn't create DB pool: {}. No caching will be available.",
-                err
-            );
-            None
-        }
-    };
-
-    let mut server = HttpServer::new(move || {
-        // Create all worker-specific (i.e. thread-unsafe) structs here
-        let viewer = Viewer::new(db_pool.clone(), SRC_BASE_URL.into());
-        let static_service =
-            Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
-        let default_headers = DefaultHeaders::new().add(("Content-Security-Policy", CSP));
-
-        App::new()
-            .app_data(web::Data::new(viewer))
-            .wrap(Compress::default())
-            .wrap(default_headers)
-            .wrap(Logger::default())
-            .service(latest_comic)
-            .service(comic_page)
-            .service(random_comic)
-            .service(minify_css)
-            // This should be at the end, otherwise everything after this will be ignored.
-            .service(static_service)
-    });
+    log::info!("Starting server at {}", host);
 
     // Currently the Rust buildpack for Heroku doesn't support WEB_CONCURRENCY, so only use it if
     // present.
-    if let Ok(web_concurrency) = env::var("WEB_CONCURRENCY") {
-        if let Ok(num_workers) = usize::from_str(web_concurrency.as_str()) {
-            server = server.workers(num_workers);
-        }
-    }
+    let workers = env::var("WEB_CONCURRENCY")
+        .ok()
+        .and_then(|workers| usize::from_str(&workers).ok());
 
-    server.bind(host)?.run().await
+    dilbert_viewer::run(host, None, workers).await
 }
