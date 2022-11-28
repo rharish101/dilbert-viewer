@@ -19,7 +19,10 @@ use std::time::Duration;
 
 use actix_web::rt::spawn;
 use awc::{
-    http::{header::CONTENT_TYPE, Method, StatusCode},
+    http::{
+        header::{CONTENT_TYPE, LOCATION},
+        Method, StatusCode,
+    },
     Client, ClientResponse,
 };
 use chrono::{NaiveDate, Utc};
@@ -35,10 +38,14 @@ use wiremock::{
 const HOST: &str = "localhost";
 /// Timeout (in seconds) for getting a response from the server
 const RESP_TIMEOUT: u64 = 5;
+/// Date of the first ever Dilbert comic
+const FIRST_COMIC: &str = "1989-04-16";
 /// Date format used for URLs on "dilbert.com"
 const SRC_DATE_FMT: &str = "%Y-%m-%d";
 /// Path to the directory where test scraping files are stored
 const SCRAPING_TEST_CASE_PATH: &str = "testdata/scraping";
+/// Number of times to run the random comic test
+const RAND_TEST_ITER: usize = 10;
 
 /// Get the HTTP client.
 fn get_http_client() -> Client {
@@ -172,4 +179,51 @@ async fn test_comic(year: i32, month: u32, day: u32) {
     if let StatusCode::OK = expected_status {
         test_content_type(resp, "text/html").await;
     }
+}
+
+#[actix_web::test]
+/// Test the random comic request.
+async fn test_random_comic() {
+    let port = pick_unused_port().expect("Couldn't find an available port");
+    let host = format!("{}:{}", HOST, port);
+
+    // Start the server on a single thread.
+    // The random comic generator shouldn't make any request to "dilbert.com", so make the URL
+    // empty.
+    let handle = spawn(run(host.clone(), Some(String::new()), Some(1)));
+
+    let client = get_http_client();
+    let first_comic = NaiveDate::parse_from_str(FIRST_COMIC, SRC_DATE_FMT).unwrap();
+    let today = Utc::now().date_naive();
+
+    for _ in 0..RAND_TEST_ITER {
+        let resp = client
+            .get(format!("http://{}/random", host))
+            .send()
+            .await
+            .expect("Failed to send request to server");
+
+        assert_eq!(
+            resp.status(),
+            StatusCode::TEMPORARY_REDIRECT,
+            "Response status is not a temporary redirect",
+        );
+
+        // Check that the comic it redirects to is valid.
+        let location = resp
+            .headers()
+            .get(LOCATION)
+            .expect("Missing Location header")
+            .to_str()
+            .expect("Location header is not ASCII");
+        let random_date = NaiveDate::parse_from_str(&location[1..], SRC_DATE_FMT)
+            .expect("Redirected to invalid date");
+        assert!(
+            random_date >= first_comic && random_date <= today,
+            "Redirected to invalid date"
+        );
+    }
+
+    // Close the server.
+    handle.abort();
 }
