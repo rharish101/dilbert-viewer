@@ -15,7 +15,6 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
-use std::env;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -79,10 +78,13 @@ impl RedisPool for Pool {
 }
 
 /// Initialize the database connection pool for caching data.
-pub async fn get_db_pool() -> Result<deadpool_redis::Pool, DbInitError> {
+///
+/// # Arguments
+/// * `url` - The URL used to connect to the database
+pub fn get_db_pool(url: String) -> Result<deadpool_redis::Pool, DbInitError> {
     // Heroku needs SSL for its Redis addon, but uses a self-signed certificate. So simply disable
     // verification while keeping SSL.
-    let config = RedisConfig::from_url(env::var("REDIS_TLS_URL")? + "#insecure");
+    let config = RedisConfig::from_url(url + "#insecure");
     let pool_builder = config
         .builder()?
         .runtime(Runtime::Tokio1)
