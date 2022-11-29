@@ -52,23 +52,30 @@ async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
 ///
 /// # Arguments
 /// * `host` - The host and port where to start the server
+/// * `db_url` - The optional URL to the database
 /// * `source_url` - The optional URL to the custom comic source
 /// * `workers` - The optional number of workers to use
 pub async fn run(
     host: String,
+    db_url: Option<String>,
     source_url: Option<String>,
     workers: Option<usize>,
 ) -> std::io::Result<()> {
     // Create all worker-shared (i.e. thread-safe) structs here
-    let db_pool = match get_db_pool().await {
-        Ok(pool) => Some(pool),
-        Err(err) => {
-            error!(
-                "Couldn't create DB pool: {}. No caching will be available.",
-                err
-            );
-            None
+    let db_pool = if let Some(db_url) = db_url {
+        match get_db_pool(db_url) {
+            Ok(pool) => Some(pool),
+            Err(err) => {
+                error!(
+                    "Couldn't create DB pool: {}. No caching will be available.",
+                    err
+                );
+                None
+            }
         }
+    } else {
+        error!("No DB URL given. No caching will be available.");
+        None
     };
 
     let mut server = HttpServer::new(move || {

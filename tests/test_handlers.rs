@@ -101,7 +101,7 @@ async fn test_latest_comic(html_file_stem: &str) {
         .await;
 
     // Start the server on a single thread.
-    let handle = spawn(run(host.clone(), Some(mock_server.uri()), Some(1)));
+    let handle = spawn(run(host.clone(), None, Some(mock_server.uri()), Some(1)));
 
     let client = get_http_client();
     let resp = client
@@ -163,7 +163,7 @@ async fn test_comic(year: i32, month: u32, day: u32) {
         .await;
 
     // Start the server on a single thread.
-    let handle = spawn(run(host.clone(), Some(mock_server.uri()), Some(1)));
+    let handle = spawn(run(host.clone(), None, Some(mock_server.uri()), Some(1)));
 
     let client = get_http_client();
     let resp = client
@@ -190,7 +190,7 @@ async fn test_random_comic() {
     // Start the server on a single thread.
     // The random comic generator shouldn't make any request to "dilbert.com", so make the URL
     // empty.
-    let handle = spawn(run(host.clone(), Some(String::new()), Some(1)));
+    let handle = spawn(run(host.clone(), None, Some(String::new()), Some(1)));
 
     let client = get_http_client();
     let first_comic = NaiveDate::parse_from_str(FIRST_COMIC, SRC_DATE_FMT).unwrap();
@@ -243,7 +243,7 @@ async fn test_static(path: &str, content_type: Option<&str>) {
 
     // Start the server on a single thread.
     // The static file service shouldn't make any request to "dilbert.com", so make the URL empty.
-    let handle = spawn(run(host.clone(), Some(String::new()), Some(1)));
+    let handle = spawn(run(host.clone(), None, Some(String::new()), Some(1)));
 
     let client = get_http_client();
     let resp = client
