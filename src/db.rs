@@ -120,3 +120,59 @@ pub mod mock {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use actix_web::{rt::spawn, App, HttpServer};
+    use portpicker::pick_unused_port;
+    use rcgen::generate_simple_self_signed;
+    use rustls::{Certificate, PrivateKey, ServerConfig};
+
+    #[actix_web::test]
+    /// Test the database connection pool initialization.
+    ///
+    /// This also tries to establish a connection to the database, since improper initialization
+    /// can still succeed initially, while failing later.
+    async fn test_database_pool_initialization() {
+        let port = pick_unused_port().expect("No available port");
+        let host = format!("localhost:{}", port);
+
+        // Generate self-signed certs for the mock server. Since Heroku also uses self-signed
+        // certs, this is fine.
+        let cert = generate_simple_self_signed(vec![host
+            .split(':')
+            .next()
+            .expect("No port specified in mock server URI")
+            .to_string()])
+        .expect("Couldn't generate TLS certificates");
+        let tls_config = ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![Certificate(
+                    cert.serialize_der().expect("Couldn't generate TLS cert"),
+                )],
+                PrivateKey(cert.serialize_private_key_der()),
+            )
+            .expect("Invalid TLS cert/key");
+
+        // Start the mock TLS server on a single thread.
+        let tls_server = HttpServer::new(App::new)
+            .bind_rustls(host.clone(), tls_config)
+            .expect("Couldn't bind mock server to host")
+            .workers(1);
+        let handle = spawn(tls_server.run());
+
+        let pool = get_db_pool(format!("rediss://{}", host)).expect("Couldn't initialize DB pool");
+        // A connection isn't attempted unless one is requested from the pool. So do that, since
+        // TLS setup errors aren't noticed during pool init.
+        pool.get()
+            .await
+            .expect("Couldn't establish a connection to the DB");
+
+        // Close the server.
+        handle.abort();
+    }
+}
