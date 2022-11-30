@@ -64,7 +64,7 @@ pub const STATIC_DIR: &str = "static/";
 /// Content security policy
 pub const CSP: &str = "\
     default-src 'none';\
-    img-src 'self' assets.amuniversal.com;\
+    img-src assets.amuniversal.com dilbert.com;\
     style-src 'self' cdn.jsdelivr.net";
 
 #[cfg(test)]
