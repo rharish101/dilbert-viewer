@@ -29,6 +29,7 @@ mod utils;
 
 use actix_files::Files;
 use actix_web::{
+    body::MessageBody,
     dev::{ServiceRequest, ServiceResponse},
     middleware::{Compress, DefaultHeaders, Logger},
     web, App, Error as WebError, HttpServer,
@@ -46,6 +47,17 @@ use crate::handlers::{comic_page, latest_comic, minify_css, random_comic};
 async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
     let (http_req, _payload) = req.into_parts();
     Ok(ServiceResponse::new(http_req, serve_404(None)))
+}
+
+/// Get the static file handling service.
+fn get_static_service() -> Files {
+    let mut service = Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
+    if let Ok(bytes) = serve_404(None).into_body().try_into_bytes() {
+        if let Ok(html) = std::str::from_utf8(&bytes) {
+            service = service.index_file(html);
+        }
+    }
+    service
 }
 
 /// Run the server.
@@ -84,8 +96,8 @@ pub async fn run(
             db_pool.clone(),
             source_url.clone().unwrap_or_else(|| SRC_BASE_URL.into()),
         );
-        let static_service =
-            Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
+        let static_service = get_static_service();
+        Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
         let default_headers = DefaultHeaders::new().add(("Content-Security-Policy", CSP));
 
         App::new()

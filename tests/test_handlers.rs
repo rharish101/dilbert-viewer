@@ -228,16 +228,18 @@ async fn test_random_comic() {
     handle.abort();
 }
 
-#[test_case("styles.css", Some("text/css"); "css")]
-#[test_case("robots.txt", Some("text/plain"); "misc")]
-#[test_case("foo", None; "non-existant")]
+#[test_case("styles.css", StatusCode::OK, "text/css"; "css")]
+#[test_case("robots.txt", StatusCode::OK, "text/plain"; "misc")]
+#[test_case("foo", StatusCode::NOT_FOUND, "text/html"; "non-existant")]
+#[test_case("//", StatusCode::NOT_FOUND, "text/html"; "existing directory")]
 #[actix_web::test]
 /// Test the static file service.
 ///
 /// # Arguments
 /// * `path` - The URL path to the static file
-/// * `content_type` - The expected Content-Type header (None if the file doesn't exist)
-async fn test_static(path: &str, content_type: Option<&str>) {
+/// * `status_code` - The expected HTTP status code
+/// * `content_type` - The expected Content-Type header
+async fn test_static(path: &str, status_code: StatusCode, content_type: &str) {
     let port = pick_unused_port().expect("Couldn't find an available port");
     let host = format!("{}:{}", HOST, port);
 
@@ -255,17 +257,6 @@ async fn test_static(path: &str, content_type: Option<&str>) {
     // Close the server.
     handle.abort();
 
-    assert_eq!(
-        resp.status(),
-        if content_type.is_some() {
-            StatusCode::OK
-        } else {
-            StatusCode::NOT_FOUND
-        },
-        "Unexpected response status",
-    );
-
-    if let Some(content_type) = content_type {
-        test_content_type(resp, content_type).await;
-    };
+    assert_eq!(resp.status(), status_code, "Unexpected response status",);
+    test_content_type(resp, content_type).await;
 }
