@@ -28,6 +28,7 @@ Then, set the required environment variables and run the viewer locally with the
 REDIS_TLS_URL=$(heroku config:get REDIS_TLS_URL -a app-name) heroku local web
 ```
 Here, `app-name` is the name of your Heroku app that has a Redis database configured.
+You can also replace the value of this environment variable with a URL to your custom Redis database.
 
 If you want to run the viewer without a Redis database, then simply run it without the environment variable:
 ```sh
