@@ -1,5 +1,5 @@
 # Dilbert Viewer
-[![Tests](https://github.com/rharish101/dilbert-viewer/actions/workflows/tests.yml/badge.svg)](https://github.com/rharish101/dilbert-viewer/actions/workflows/tests.yml)
+[![Tests](https://img.shields.io/github/workflow/status/rharish101/dilbert-viewer/Tests?label=Tests&logo=github&style=flat-square)](https://github.com/rharish101/dilbert-viewer/actions/workflows/tests.yml)
 
 A simple comic viewer for Dilbert by Scott Adams, hosted on Heroku [here](https://dilbert-viewer.herokuapp.com).
 It uses the third-party [Rust Buildpack](https://elements.heroku.com/buildpacks/emk/heroku-buildpack-rust) with the [Heroku Redis add-on](https://elements.heroku.com/addons/heroku-redis) for caching.
