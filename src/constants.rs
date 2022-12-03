@@ -30,7 +30,7 @@ pub const DISP_DATE_FMT: &str = "%A %B %d, %Y";
 // Parameters for scraping from "dilbert.com"
 // ==================================================
 /// Timeout (in seconds) for getting a response
-pub const RESP_TIMEOUT: u64 = 5;
+pub const RESP_TIMEOUT: u64 = 10;
 
 // ==================================================
 // Parameters for caching to the database
