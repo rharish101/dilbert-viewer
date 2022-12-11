@@ -87,7 +87,7 @@ impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
             return Ok(None);
         };
 
-        // Render enforces an upper limit on the DB memory, and we manually set it to evict the
+        // Heroku enforces an upper limit on the DB memory, and we manually set it to evict the
         // least recently used keys. Thus, since it's possible that this key has been evicted, we
         // use an `Option` for `raw_data`.
         let info: Option<LatestDateInfo> = conn.get(LATEST_DATE_KEY).await?;

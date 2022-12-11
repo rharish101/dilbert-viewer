@@ -22,6 +22,7 @@ use log::error;
 use portpicker::{is_free, pick_unused_port};
 
 /// Default port when one isn't specified
+// This is Heroku's default port when running locally
 pub const PORT: u16 = 5000;
 
 #[actix_web::main]
@@ -43,12 +44,18 @@ async fn main() -> std::io::Result<()> {
     let host = format!("0.0.0.0:{}", port);
     println!("Starting server at {}", host);
 
-    let db_url = if let Ok(db_url) = env::var("REDIS_URL") {
+    let db_url = if let Ok(db_url) = env::var("REDIS_TLS_URL") {
         Some(db_url)
     } else {
         error!("Missing environment variable for the database URL");
         None
     };
 
-    dilbert_viewer::run(host, db_url, None, None).await
+    // Currently the Rust buildpack for Heroku doesn't support WEB_CONCURRENCY, so only use it if
+    // present.
+    let workers = env::var("WEB_CONCURRENCY")
+        .ok()
+        .and_then(|workers| usize::from_str(&workers).ok());
+
+    dilbert_viewer::run(host, db_url, None, workers).await
 }

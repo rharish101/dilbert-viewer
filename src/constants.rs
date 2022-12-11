@@ -36,8 +36,8 @@ pub const RESP_TIMEOUT: u64 = 10;
 // Parameters for caching to the database
 // ==================================================
 /// Limit for connections to the cache database
-// Render's free tier limit is 50.
-pub const MAX_DB_CONN: usize = 49;
+// Heroku's free tier limit is 20.
+pub const MAX_DB_CONN: usize = 19;
 /// Timeout (in seconds) for a single database operation
 pub const DB_TIMEOUT: u64 = 3;
 /// No. of hrs after scraping the latest date when it is to be scraped again
@@ -52,7 +52,7 @@ pub const SRC_BASE_URL: &str = "https://dilbert.com";
 pub const SRC_COMIC_PREFIX: &str = "strip/";
 /// Link to the public version of this app
 // Used in the OpenGraph tags
-pub const APP_URL: &str = "https://dilbert-viewer.onrender.com/";
+pub const APP_URL: &str = "https://dilbert-viewer.herokuapp.com/";
 /// Link to the public version of this repo
 // Mainly for publicity :P
 pub const REPO_URL: &str = "https://github.com/rharish101/dilbert-viewer";
