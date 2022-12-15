@@ -1,4 +1,4 @@
-//! Contains the server and its responders.
+//! The public interface for running the viewer app
 //!
 //! This file is separated from `main.rs` for the sole purpose of integration testing.
 // This file is part of Dilbert Viewer.

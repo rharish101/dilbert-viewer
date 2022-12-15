@@ -1,4 +1,4 @@
-//! Route handlers for the server.
+//! Route handlers for the server
 //!
 //! This is kept separate from `lib.rs`, since actix-web handlers are pub by default.
 // This file is part of Dilbert Viewer.

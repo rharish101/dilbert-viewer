@@ -1,4 +1,4 @@
-//! Utilities for working with the database.
+//! Utilities for working with the database
 // This file is part of Dilbert Viewer.
 //
 // Copyright (C) 2022  Harish Rajagopal <harish.rajagopals@gmail.com>

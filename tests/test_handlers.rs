@@ -1,4 +1,4 @@
-//! Tests for different route handlers of the web server.
+//! Tests for different route handlers of the web server
 // This file is part of Dilbert Viewer.
 //
 // Copyright (C) 2022  Harish Rajagopal <harish.rajagopals@gmail.com>
