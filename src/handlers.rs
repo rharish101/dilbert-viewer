@@ -26,7 +26,7 @@ use rand::{thread_rng, Rng};
 
 use crate::app::{serve_404, serve_css, Viewer};
 use crate::constants::{FIRST_COMIC, SRC_DATE_FMT, STATIC_DIR};
-use crate::utils::{curr_date, str_to_date};
+use crate::datetime::{curr_date, str_to_date};
 
 /// Serve the latest comic.
 #[get("/")]

@@ -20,13 +20,13 @@
 mod app;
 mod client;
 mod constants;
+mod datetime;
 mod db;
 mod errors;
 mod handlers;
 mod logging;
 mod scrapers;
 mod templates;
-mod utils;
 
 use actix_files::Files;
 use actix_web::{

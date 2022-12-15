@@ -27,10 +27,10 @@ use tracing::{debug, error, info, instrument};
 
 use crate::client::HttpClient;
 use crate::constants::{LATEST_DATE_REFRESH, SRC_COMIC_PREFIX, SRC_DATE_FMT};
+use crate::datetime::{curr_date, curr_datetime};
 use crate::db::{RedisPool, SerdeAsyncCommands};
 use crate::errors::{AppError, AppResult};
 use crate::scrapers::Scraper;
-use crate::utils::{curr_date, curr_datetime};
 
 /// Key for storing the latest date in the DB
 const LATEST_DATE_KEY: &str = "latest-date";
@@ -171,9 +171,9 @@ mod tests {
         Mock, MockServer, ResponseTemplate,
     };
 
+    use crate::datetime::{curr_date, mock::mock_time_file};
     use crate::db::mock::MockPool;
     use crate::scrapers::scraper::mock::GetCacheState;
-    use crate::utils::{curr_date, mock::mock_time_file};
 
     #[test_case(GetCacheState::Fresh; "fresh retrieval")]
     #[test_case(GetCacheState::Stale; "stale retrieval")]

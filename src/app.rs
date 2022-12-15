@@ -28,11 +28,11 @@ use crate::client::HttpClient;
 use crate::constants::{
     APP_URL, DISP_DATE_FMT, FIRST_COMIC, REPO_URL, SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT,
 };
+use crate::datetime::str_to_date;
 use crate::db::RedisPool;
 use crate::errors::{AppError, AppResult, MinificationError};
 use crate::scrapers::{ComicData, ComicScraper, LatestDateScraper};
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
-use crate::utils::str_to_date;
 
 pub struct Viewer<T: RedisPool + 'static> {
     /// The scraper for comics given date

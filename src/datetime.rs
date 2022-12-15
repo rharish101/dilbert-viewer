@@ -1,4 +1,4 @@
-//! Utilities for the viewer app
+//! Datetime utilities for the viewer app
 // This file is part of Dilbert Viewer.
 //
 // Copyright (C) 2022  Harish Rajagopal <harish.rajagopals@gmail.com>
