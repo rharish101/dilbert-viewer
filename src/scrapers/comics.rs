@@ -25,7 +25,7 @@ use html_escape::decode_html_entities;
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
 use crate::client::HttpClient;
 use crate::constants::{SRC_COMIC_PREFIX, SRC_DATE_FMT};
@@ -68,6 +68,7 @@ impl<T: RedisPool + 'static> ComicScraper<T> {
     /// # Arguments
     /// * `date` - The date of the requested comic
     #[cfg_attr(test, allow(dead_code))]
+    #[instrument(skip(self))]
     pub async fn get_comic_data(&self, date: &NaiveDate) -> AppResult<Option<ComicData>> {
         match self.get_data(date).await {
             Ok(comic_data) => Ok(Some(comic_data)),

@@ -23,7 +23,7 @@ use chrono::{Duration, NaiveDate, NaiveDateTime};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
 use crate::client::HttpClient;
 use crate::constants::{LATEST_DATE_REFRESH, SRC_COMIC_PREFIX, SRC_DATE_FMT};
@@ -59,6 +59,7 @@ impl<T: RedisPool + 'static> LatestDateScraper<T> {
 
     /// Retrieve the date of the latest comic.
     #[cfg_attr(test, allow(dead_code))]
+    #[instrument(skip(self))]
     pub async fn get_latest_date(&self) -> AppResult<NaiveDate> {
         self.get_data(&()).await
     }
@@ -68,6 +69,7 @@ impl<T: RedisPool + 'static> LatestDateScraper<T> {
     /// # Arguments
     /// * `date` - The date of the latest comic
     #[cfg_attr(test, allow(dead_code))]
+    #[instrument(skip(self))]
     pub async fn update_latest_date(&self, date: &NaiveDate) -> AppResult<()> {
         self.cache_data(date, &()).await
     }
