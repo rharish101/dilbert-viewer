@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use std::env;
+use std::io::stdout;
 use std::str::FromStr;
 
 use portpicker::{is_free, pick_unused_port};
@@ -28,9 +29,12 @@ pub const PORT: u16 = 5000;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Log to stdout in a non-blocking way using a logging thread.
+    let (writer, _guard) = tracing_appender::non_blocking(stdout());
     tracing_subscriber::fmt()
         // Use the `RUST_LOG` env var, like `env_logger`.
         .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(writer)
         .init();
 
     let port = if let Some(port) = env::var("PORT")

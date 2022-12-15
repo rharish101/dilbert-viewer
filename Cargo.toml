@@ -30,6 +30,7 @@ thiserror = "1.0.34"
 tl = "0.7.7"
 tokio = { version = "1.15.0", features = ["fs"] }
 tracing = "0.1.37"
+tracing-appender = "0.2.2"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 [profile.release]
