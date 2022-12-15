@@ -18,7 +18,7 @@ jobs:
       id: toolchain
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: beta
+          toolchain: stable
           override: true
           components: rustfmt, clippy
     - name: Restore build cache
