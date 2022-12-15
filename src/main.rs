@@ -41,8 +41,8 @@ async fn main() -> std::io::Result<()> {
     } else {
         panic!("Couldn't find any unused TCP port")
     };
-    let host = format!("0.0.0.0:{}", port);
-    println!("Starting server at {}", host);
+    let host = format!("0.0.0.0:{port}");
+    println!("Starting server at {host}");
 
     let db_url = if let Ok(db_url) = env::var("REDIS_TLS_URL") {
         Some(db_url)

@@ -137,7 +137,7 @@ mod tests {
     /// can still succeed initially, while failing later.
     async fn test_database_pool_initialization() {
         let port = pick_unused_port().expect("No available port");
-        let host = format!("localhost:{}", port);
+        let host = format!("localhost:{port}");
 
         // Generate self-signed certs for the mock server. Since Heroku also uses self-signed
         // certs, this is fine.
@@ -165,7 +165,7 @@ mod tests {
             .workers(1);
         let handle = spawn(tls_server.run());
 
-        let pool = get_db_pool(format!("rediss://{}", host)).expect("Couldn't initialize DB pool");
+        let pool = get_db_pool(format!("rediss://{host}")).expect("Couldn't initialize DB pool");
         // A connection isn't attempted unless one is requested from the pool. So do that, since
         // TLS setup errors aren't noticed during pool init.
         pool.get()

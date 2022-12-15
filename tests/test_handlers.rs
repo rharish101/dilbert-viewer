@@ -83,16 +83,14 @@ async fn test_content_type<T>(resp: ClientResponse<T>, expected: &str) {
 /// * `html_file_stem` - The file stem to the HTML page that is to be served for the latest date.
 async fn test_latest_comic(html_file_stem: &str) {
     let port = pick_unused_port().expect("Couldn't find an available port");
-    let host = format!("{}:{}", HOST, port);
+    let host = format!("{HOST}:{port}");
 
     // Set up the mock server to serve the comic for the mocked latest date.
     let mock_server = MockServer::start().await;
-    let html = tokio::fs::read_to_string(format!(
-        "{}/{}.html",
-        SCRAPING_TEST_CASE_PATH, html_file_stem
-    ))
-    .await
-    .expect("Couldn't get test page for scraping");
+    let html =
+        tokio::fs::read_to_string(format!("{SCRAPING_TEST_CASE_PATH}/{html_file_stem}.html"))
+            .await
+            .expect("Couldn't get test page for scraping");
     let today = Utc::now().date_naive();
     Mock::given(method(Method::GET.as_str()))
         .and(path(format!("/strip/{}", today.format(SRC_DATE_FMT))))
@@ -105,7 +103,7 @@ async fn test_latest_comic(html_file_stem: &str) {
 
     let client = get_http_client();
     let resp = client
-        .get(format!("http://{}/", host))
+        .get(format!("http://{host}/"))
         .send()
         .await
         .expect("Failed to send request to server");
@@ -128,9 +126,9 @@ async fn test_latest_comic(html_file_stem: &str) {
 /// * `day` - The day of the comic
 async fn test_comic(year: i32, month: u32, day: u32) {
     let port = pick_unused_port().expect("Couldn't find an available port");
-    let host = format!("{}:{}", HOST, port);
+    let host = format!("{HOST}:{port}");
 
-    let date_str = format!("{:04}-{:02}-{:02}", year, month, day);
+    let date_str = format!("{year:04}-{month:02}-{day:02}");
     let expected_status = if NaiveDate::from_ymd_opt(year, month, day).is_some() {
         StatusCode::OK
     } else {
@@ -142,12 +140,11 @@ async fn test_comic(year: i32, month: u32, day: u32) {
 
     // Mock the requested comic, only if it exists.
     if let StatusCode::OK = expected_status {
-        let html =
-            tokio::fs::read_to_string(format!("{}/{}.html", SCRAPING_TEST_CASE_PATH, date_str))
-                .await
-                .expect("Couldn't get test page for scraping");
+        let html = tokio::fs::read_to_string(format!("{SCRAPING_TEST_CASE_PATH}/{date_str}.html"))
+            .await
+            .expect("Couldn't get test page for scraping");
         Mock::given(method(Method::GET.as_str()))
-            .and(path(format!("/strip/{}", date_str)))
+            .and(path(format!("/strip/{date_str}")))
             .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html))
             .mount(&mock_server)
             .await;
@@ -167,7 +164,7 @@ async fn test_comic(year: i32, month: u32, day: u32) {
 
     let client = get_http_client();
     let resp = client
-        .get(format!("http://{}/{}", host, date_str))
+        .get(format!("http://{host}/{date_str}"))
         .send()
         .await
         .expect("Failed to send request to server");
@@ -185,7 +182,7 @@ async fn test_comic(year: i32, month: u32, day: u32) {
 /// Test the random comic request.
 async fn test_random_comic() {
     let port = pick_unused_port().expect("Couldn't find an available port");
-    let host = format!("{}:{}", HOST, port);
+    let host = format!("{HOST}:{port}");
 
     // Start the server on a single thread.
     // The random comic generator shouldn't make any request to "dilbert.com", so make the URL
@@ -198,7 +195,7 @@ async fn test_random_comic() {
 
     for _ in 0..RAND_TEST_ITER {
         let resp = client
-            .get(format!("http://{}/random", host))
+            .get(format!("http://{host}/random"))
             .send()
             .await
             .expect("Failed to send request to server");
@@ -241,7 +238,7 @@ async fn test_random_comic() {
 /// * `content_type` - The expected Content-Type header
 async fn test_static(path: &str, status_code: StatusCode, content_type: &str) {
     let port = pick_unused_port().expect("Couldn't find an available port");
-    let host = format!("{}:{}", HOST, port);
+    let host = format!("{HOST}:{port}");
 
     // Start the server on a single thread.
     // The static file service shouldn't make any request to "dilbert.com", so make the URL empty.
@@ -249,7 +246,7 @@ async fn test_static(path: &str, status_code: StatusCode, content_type: &str) {
 
     let client = get_http_client();
     let resp = client
-        .get(format!("http://{}/{}", host, path))
+        .get(format!("http://{host}/{path}"))
         .send()
         .await
         .expect("Failed to send request to server");

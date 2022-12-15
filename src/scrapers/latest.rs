@@ -126,7 +126,7 @@ impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
         // If there is no comic for this date yet, "dilbert.com" will auto-redirect to the
         // homepage.
         let today = curr_date();
-        let path = format!("{}{}", SRC_COMIC_PREFIX, curr_date().format(SRC_DATE_FMT));
+        let path = format!("{SRC_COMIC_PREFIX}{}", curr_date().format(SRC_DATE_FMT));
 
         info!("Trying date \"{}\" for latest comic", today);
         let mut resp = self.http_client.get(&path).send().await?;
@@ -218,7 +218,7 @@ mod tests {
         // Max pool size is one, since only one connection is needed.
         let db = MockPool::new(1);
         if let Err((_, err)) = db.add(MockRedisConnection::new([retrieval_cmd])).await {
-            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+            panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
         // The HTTP client shouldn't be used, so make the base URL empty.
@@ -253,7 +253,7 @@ mod tests {
         // Max pool size is one, since only one connection is needed.
         let db = MockPool::new(1);
         if let Err((_, err)) = db.add(MockRedisConnection::new([storage_cmd])).await {
-            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+            panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
         // Mock the datetime with the expected `last_check` time, otherwise a different one will be
@@ -304,7 +304,7 @@ mod tests {
 
         // Set up the mock server to return the pre-fetched "dilbert.com" response for the given date.
         Mock::given(method(Method::GET.as_str()))
-            .and(path(format!("/{}{}", SRC_COMIC_PREFIX, date_str)))
+            .and(path(format!("/{SRC_COMIC_PREFIX}{date_str}")))
             // Response body shouldn't matter, so keep it empty.
             .respond_with(ResponseTemplate::new(response_status.as_u16()))
             .mount(&mock_server)

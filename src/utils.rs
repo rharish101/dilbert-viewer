@@ -46,7 +46,7 @@ pub mod mock {
     pub fn mock_time_file(datetime: DateTime<Utc>) -> TempPath {
         match u64::try_from(datetime.timestamp_millis()) {
             Ok(millis) => millis_tempfile(millis).expect("Couldn't set mock time"),
-            Err(err) => panic!("Couldn't set mock time: {}", err),
+            Err(err) => panic!("Couldn't set mock time: {err}"),
         }
     }
 }

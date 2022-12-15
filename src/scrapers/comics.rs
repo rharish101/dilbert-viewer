@@ -110,14 +110,14 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
 
     /// Scrape the comic data of the requested date from the source.
     async fn scrape_data(&self, date: &NaiveDate) -> AppResult<ComicData> {
-        let path = format!("{}{}", SRC_COMIC_PREFIX, date.format(SRC_DATE_FMT));
+        let path = format!("{SRC_COMIC_PREFIX}{}", date.format(SRC_DATE_FMT));
         let mut resp = self.http_client.get(&path).send().await?;
         let status = resp.status();
 
         match status {
             StatusCode::FOUND => {
                 // Redirected to homepage, implying that there's no comic for this date
-                return Err(AppError::NotFound(format!("Comic for {} not found", date)));
+                return Err(AppError::NotFound(format!("Comic for {date} not found")));
             }
             StatusCode::OK => (),
             _ => {
@@ -263,7 +263,7 @@ mod tests {
         // Max pool size is one, since only one connection is needed.
         let db = MockPool::new(1);
         if let Err((_, err)) = db.add(MockRedisConnection::new([retrieval_cmd])).await {
-            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+            panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
         // The HTTP client shouldn't be used, so make the base URL empty.
@@ -300,7 +300,7 @@ mod tests {
         // Max pool size is one, since only one connection is needed.
         let db = MockPool::new(1);
         if let Err((_, err)) = db.add(MockRedisConnection::new([storage_cmd])).await {
-            panic!("Couldn't add mock DB connection to mock DB pool: {}", err);
+            panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
         // The HTTP client shouldn't be used, so make the base URL empty.
@@ -351,7 +351,7 @@ mod tests {
             ResponseTemplate::new(StatusCode::FOUND.as_u16())
         } else {
             let html =
-                tokio::fs::read_to_string(format!("{}/{}.html", SCRAPING_TEST_CASE_PATH, date_str))
+                tokio::fs::read_to_string(format!("{SCRAPING_TEST_CASE_PATH}/{date_str}.html"))
                     .await
                     .expect("Couldn't read test page for scraping");
             ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html)
@@ -359,7 +359,7 @@ mod tests {
 
         // Set up the mock server to return the pre-fetched "dilbert.com" response for the given date.
         Mock::given(method(Method::GET.as_str()))
-            .and(path(format!("/{}{}", SRC_COMIC_PREFIX, date_str)))
+            .and(path(format!("/{SRC_COMIC_PREFIX}{date_str}")))
             .respond_with(response)
             .mount(&mock_server)
             .await;

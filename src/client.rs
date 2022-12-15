@@ -42,7 +42,7 @@ impl HttpClient {
 
     /// Perform a GET request for the given URL path.
     pub fn get(&self, path: &str) -> ClientRequest {
-        self.client.get(format!("{}/{}", self.base_url, path))
+        self.client.get(format!("{}/{path}", self.base_url))
     }
 }
 

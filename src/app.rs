@@ -85,7 +85,7 @@ impl<T: RedisPool + Clone + 'static> Viewer<T> {
                     ));
                 }
             } else {
-                return Err(AppError::NotFound(format!("No comic found for {}", date)));
+                return Err(AppError::NotFound(format!("No comic found for {date}")));
             }
         };
 
@@ -171,9 +171,7 @@ fn serve_template(
         disable_left_nav: date == first_comic,
         disable_right_nav: date == latest_comic,
         permalink: &format!(
-            "{}/{}{}",
-            SRC_BASE_URL,
-            SRC_COMIC_PREFIX,
+            "{SRC_BASE_URL}/{SRC_COMIC_PREFIX}{}",
             date.format(SRC_DATE_FMT)
         ),
         app_url: APP_URL,
@@ -256,7 +254,7 @@ pub fn serve_404(date: Option<&NaiveDate>) -> HttpResponse {
 /// # Arguments
 /// * `err` - The actual internal server error
 pub fn serve_500(err: &AppError) -> HttpResponse {
-    let error = &format!("{}", err);
+    let error = &format!("{err}");
     let mut response = HttpResponse::InternalServerError();
 
     let error_template = ErrorTemplate {
@@ -312,7 +310,7 @@ mod tests {
     /// # Arguments
     /// * `file_stem` - The filename stem of the HTML file to be used for testing
     fn test_minified_html_is_parsable(file_stem: &str) {
-        let path = format!("{}/{}.html", HTML_TEST_CASE_PATH, file_stem);
+        let path = format!("{HTML_TEST_CASE_PATH}/{file_stem}.html");
         let html =
             read_to_string(&path).unwrap_or_else(|_| panic!("Couldn't read test case {}", &path));
 
@@ -434,12 +432,12 @@ mod tests {
             Ok(resp) => resp,
             Err(AppError::NotFound(err)) => {
                 if should_serve {
-                    panic!("Error serving CSS that exists: {}", err);
+                    panic!("Error serving CSS that exists: {err}");
                 } else {
                     return;
                 }
             }
-            Err(err) => panic!("Error serving CSS: {}", err),
+            Err(err) => panic!("Error serving CSS: {err}"),
         };
 
         // Ensure that no CSS is served when it shouldn't.
@@ -593,7 +591,7 @@ mod tests {
                 );
             }
             Err(AppError::NotFound(..)) if !show_latest => {}
-            Err(err) => panic!("Viewer failed to get info: {}", err),
+            Err(err) => panic!("Viewer failed to get info: {err}"),
         };
     }
 
