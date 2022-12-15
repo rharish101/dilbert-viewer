@@ -23,6 +23,7 @@ mod constants;
 mod db;
 mod errors;
 mod handlers;
+mod logging;
 mod scrapers;
 mod templates;
 mod utils;
@@ -31,15 +32,17 @@ use actix_files::Files;
 use actix_web::{
     body::MessageBody,
     dev::{ServiceRequest, ServiceResponse},
-    middleware::{Compress, DefaultHeaders, Logger},
+    middleware::{Compress, DefaultHeaders},
     web, App, Error as WebError, HttpServer,
 };
 use tracing::error;
+use tracing_actix_web::TracingLogger;
 
 use crate::app::{serve_404, Viewer};
 use crate::constants::{CSP, SRC_BASE_URL, STATIC_DIR, STATIC_URL};
 use crate::db::get_db_pool;
 use crate::handlers::{comic_page, latest_comic, minify_css, random_comic};
+use crate::logging::RequestSpanBuilder;
 
 /// Handle invalid URLs by sending 404s.
 ///
@@ -104,7 +107,7 @@ pub async fn run(
             .app_data(web::Data::new(viewer))
             .wrap(Compress::default())
             .wrap(default_headers)
-            .wrap(Logger::default())
+            .wrap(TracingLogger::<RequestSpanBuilder>::new())
             .service(latest_comic)
             .service(comic_page)
             .service(random_comic)
