@@ -18,8 +18,9 @@
 use std::env;
 use std::str::FromStr;
 
-use log::error;
 use portpicker::{is_free, pick_unused_port};
+use tracing::error;
+use tracing_subscriber::EnvFilter;
 
 /// Default port when one isn't specified
 // This is Heroku's default port when running locally
@@ -27,7 +28,10 @@ pub const PORT: u16 = 5000;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    pretty_env_logger::init();
+    tracing_subscriber::fmt()
+        // Use the `RUST_LOG` env var, like `env_logger`.
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let port = if let Some(port) = env::var("PORT")
         .ok()

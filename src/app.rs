@@ -22,7 +22,7 @@ use std::rc::Rc;
 use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
 use chrono::{Duration, NaiveDate};
-use log::{debug, error, info};
+use tracing::{debug, error, info};
 
 use crate::client::HttpClient;
 use crate::constants::{

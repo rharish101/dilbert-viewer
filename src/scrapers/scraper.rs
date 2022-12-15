@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use async_trait::async_trait;
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::errors::AppResult;
 

@@ -21,11 +21,11 @@ use async_trait::async_trait;
 use awc::http::StatusCode;
 use chrono::NaiveDate;
 use html_escape::decode_html_entities;
-use log::{error, info};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
+use tracing::{error, info};
 
 use crate::client::HttpClient;
 use crate::constants::{SRC_COMIC_PREFIX, SRC_DATE_FMT};

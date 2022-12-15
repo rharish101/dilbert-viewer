@@ -20,10 +20,10 @@ use std::rc::Rc;
 use async_trait::async_trait;
 use awc::http::StatusCode;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
-use log::{debug, error, info};
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info};
 
 use crate::client::HttpClient;
 use crate::constants::{LATEST_DATE_REFRESH, SRC_COMIC_PREFIX, SRC_DATE_FMT};

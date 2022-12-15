@@ -24,8 +24,8 @@ pub mod mock {
 
     use chrono::{DateTime, Utc};
     use faketime::{millis_tempfile, unix_time_as_millis};
-    use log::warn;
     use tempfile::TempPath;
+    use tracing::warn;
 
     pub struct MockUtc {}
     impl MockUtc {

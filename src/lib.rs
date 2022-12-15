@@ -34,7 +34,7 @@ use actix_web::{
     middleware::{Compress, DefaultHeaders, Logger},
     web, App, Error as WebError, HttpServer,
 };
-use log::error;
+use tracing::error;
 
 use crate::app::{serve_404, Viewer};
 use crate::constants::{CSP, SRC_BASE_URL, STATIC_DIR, STATIC_URL};
