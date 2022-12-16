@@ -25,7 +25,13 @@ use tracing_subscriber::EnvFilter;
 
 /// Default port when one isn't specified
 // This is Heroku's default port when running locally
-pub const PORT: u16 = 5000;
+const PORT: u16 = 5000;
+
+// Environment variables that are read
+/// Port on which to run the server
+const PORT_VAR: &str = "PORT";
+/// Redis database connection URL
+const REDIS_URL_VAR: &str = "REDIS_TLS_URL";
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -37,7 +43,7 @@ async fn main() -> std::io::Result<()> {
         .with_writer(writer)
         .init();
 
-    let port = if let Some(port) = env::var("PORT")
+    let port = if let Some(port) = env::var(PORT_VAR)
         .ok()
         .and_then(|port| u16::from_str(&port).ok())
     {
@@ -52,10 +58,10 @@ async fn main() -> std::io::Result<()> {
     let host = format!("0.0.0.0:{port}");
     println!("Starting server at {host}");
 
-    let db_url = if let Ok(db_url) = env::var("REDIS_TLS_URL") {
+    let db_url = if let Ok(db_url) = env::var(REDIS_URL_VAR) {
         Some(db_url)
     } else {
-        error!("Missing environment variable for the database URL");
+        error!("Missing environment variable for the database URL: {REDIS_URL_VAR}");
         None
     };
 
