@@ -71,8 +71,8 @@ impl<T: RedisPool + Clone + 'static> Viewer<T> {
             // homepage).
             if show_latest {
                 info!(
-                    "No comic found for {date}, instead displaying the latest comic ({})",
-                    latest_comic
+                    "No comic found for {date}, instead displaying the latest comic \
+                    ({latest_comic})",
                 );
                 let comic_data = self.comic_scraper.get_comic_data(&latest_comic).await?;
                 if let Some(comic_data) = comic_data {
@@ -136,7 +136,7 @@ fn minify_html(mut html: String) -> AppResult<String> {
     };
     html.truncate(new_len);
 
-    debug!("Minified HTML from {} bytes to {}", old_len, html.len());
+    debug!("Minified HTML from {old_len} bytes to {}", html.len());
     Ok(html)
 }
 
@@ -273,7 +273,7 @@ pub fn serve_500(err: &AppError) -> HttpResponse {
             response.content_type(ContentType::html()).body(minified)
         }
         Err(err) => {
-            error!("Couldn't render Error 500 HTML: {}", err);
+            error!("Couldn't render Error 500 HTML: {err}");
             // An empty Error 500 response is still better than crashing
             response.finish()
         }

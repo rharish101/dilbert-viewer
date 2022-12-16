@@ -105,7 +105,7 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
         };
 
         conn.set(date, comic_data).await?;
-        info!("Successfully cached data for {} in cache", date);
+        info!("Successfully cached data for {date} in cache");
         Ok(())
     }
 
@@ -122,7 +122,7 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
             }
             StatusCode::OK => (),
             _ => {
-                error!("Unexpected response status: {}", status);
+                error!("Unexpected response status: {status}");
                 return Err(AppError::Scrape(format!(
                     "Couldn't scrape comic: {:#?}",
                     resp.body().await?

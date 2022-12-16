@@ -119,7 +119,7 @@ impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
         };
         conn.set(LATEST_DATE_KEY, &new_info).await?;
 
-        info!("Successfully updated latest date in cache to: {}", date);
+        info!("Successfully updated latest date in cache to: {date}");
         Ok(())
     }
 
@@ -130,7 +130,7 @@ impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
         let today = curr_date();
         let path = format!("{SRC_COMIC_PREFIX}{}", curr_date().format(SRC_DATE_FMT));
 
-        info!("Trying date \"{}\" for latest comic", today);
+        info!("Trying date \"{today}\" for latest comic");
         let mut resp = self.http_client.get(&path).send().await?;
         let status = resp.status();
 
@@ -139,15 +139,15 @@ impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
                 // Redirected to homepage, implying that there's no comic for this date. There must
                 // be a comic for the previous date, so use that.
                 let date = today - Duration::days(1);
-                info!("No comic found for today ({}); using date: {}", today, date);
+                info!("No comic found for today ({today}); using date: {date}");
                 Ok(date)
             }
             StatusCode::OK => {
-                info!("Found comic for today ({}); using it as latest date", today);
+                info!("Found comic for today ({today}); using it as latest date");
                 Ok(today)
             }
             _ => {
-                error!("Unexpected response status: {}", status);
+                error!("Unexpected response status: {status}");
                 Err(AppError::Scrape(format!(
                     "Couldn't scrape latest date: {:#?}",
                     resp.body().await?

@@ -81,10 +81,7 @@ pub async fn run(
         match get_db_pool(db_url) {
             Ok(pool) => Some(pool),
             Err(err) => {
-                error!(
-                    "Couldn't create DB pool: {}. No caching will be available.",
-                    err
-                );
+                error!("Couldn't create DB pool: {err}. No caching will be available.",);
                 None
             }
         }

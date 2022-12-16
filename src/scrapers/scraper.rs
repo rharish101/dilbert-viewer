@@ -54,7 +54,7 @@ pub trait Scraper<D, R> {
     /// * `reference` - The reference to the data that is to be retrieved
     async fn safely_cache_data(&self, data: &D, reference: &R) {
         if let Err(err) = self.cache_data(data, reference).await {
-            error!("Error caching data: {}", err);
+            error!("Error caching data: {err}");
         }
     }
 
@@ -72,7 +72,7 @@ pub trait Scraper<D, R> {
             Ok(None) => None,
             Err(err) => {
                 // Better to re-scrape now than crash unexpectedly, so simply log the error.
-                error!("Error retrieving from cache: {}", err);
+                error!("Error retrieving from cache: {err}");
                 None
             }
         };
@@ -89,7 +89,7 @@ pub trait Scraper<D, R> {
         };
 
         // Scraping failed for some reason, so use the "stale" cache entry, if available.
-        error!("Scraping failed with error: {}", err);
+        error!("Scraping failed with error: {err}");
 
         return match stale_data {
             // No stale cache entry exists, so raise the scraping error.
