@@ -34,6 +34,8 @@ const LOG_LEVEL: LevelFilter = LevelFilter::WARN;
 // Environment variables that are read
 /// Port on which to run the server
 const PORT_VAR: &str = "PORT";
+/// Log level
+const LOG_VAR: &str = "RUST_LOG";
 /// Redis database connection URL
 const REDIS_URL_VAR: &str = "REDIS_TLS_URL";
 
@@ -44,7 +46,7 @@ fn init_logger() -> WorkerGuard {
 
     // Use the `RUST_LOG` env var, like `env_logger`, but with a default.
     let builder = EnvFilter::builder().with_default_directive(LOG_LEVEL.into());
-    let filter = match builder.try_from_env() {
+    let filter = match builder.parse(env::var(LOG_VAR).unwrap_or_default()) {
         Ok(filter) => filter,
         Err(err) => {
             println!("Invalid log level: {err}");
