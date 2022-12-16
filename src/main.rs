@@ -60,12 +60,9 @@ fn init_logger() -> WorkerGuard {
     guard
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    // The non-blocking writer stays active as long as `_guard` is not dropped.
-    let _guard = init_logger();
-
-    let port = if let Some(port) = env::var(PORT_VAR)
+/// Choose the port from an environment variable, with a fallback.
+fn choose_port() -> u16 {
+    if let Some(port) = env::var(PORT_VAR)
         .ok()
         .and_then(|port| u16::from_str(&port).ok())
     {
@@ -76,8 +73,15 @@ async fn main() -> std::io::Result<()> {
         port
     } else {
         panic!("Couldn't find any unused TCP port")
-    };
-    let host = format!("0.0.0.0:{port}");
+    }
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    // The non-blocking writer stays active as long as `_guard` is not dropped.
+    let _guard = init_logger();
+
+    let host = format!("0.0.0.0:{}", choose_port());
 
     let db_url = if let Ok(db_url) = env::var(REDIS_URL_VAR) {
         Some(db_url)
