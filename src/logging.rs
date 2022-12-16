@@ -23,6 +23,8 @@ use actix_web::{
 use tracing::{info, info_span, Span};
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 
+use crate::constants::TELEMETRY_TARGET;
+
 pub struct RequestSpanBuilder {}
 
 impl RootSpanBuilder for RequestSpanBuilder {
@@ -66,7 +68,14 @@ impl RootSpanBuilder for RequestSpanBuilder {
 
         // Record some request info within the "telemetry" target, so that the log level for
         // telemetry can be independently set.
-        info!(target: "telemetry", parent: &span, ip_addr, req_line, user_agent, referrer);
+        info!(
+            target: TELEMETRY_TARGET,
+            parent: &span,
+            ip_addr,
+            req_line,
+            user_agent,
+            referrer
+        );
 
         span
     }
