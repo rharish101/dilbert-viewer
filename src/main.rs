@@ -59,11 +59,5 @@ async fn main() -> std::io::Result<()> {
         None
     };
 
-    // Currently the Rust buildpack for Heroku doesn't support WEB_CONCURRENCY, so only use it if
-    // present.
-    let workers = env::var("WEB_CONCURRENCY")
-        .ok()
-        .and_then(|workers| usize::from_str(&workers).ok());
-
-    dilbert_viewer::run(host, db_url, None, workers).await
+    dilbert_viewer::run(host, db_url, None, None).await
 }
