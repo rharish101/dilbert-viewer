@@ -20,10 +20,12 @@ use actix_web::{
     http::header::{REFERER, USER_AGENT},
     HttpMessage, Result as ActixResult,
 };
-use tracing::{info, info_span, Span};
+use chrono::NaiveDateTime;
+use tracing::{error, info, info_span, Span};
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 
 use crate::constants::TELEMETRY_TARGET;
+use crate::datetime::curr_datetime;
 
 pub struct RequestSpanBuilder {}
 
@@ -77,8 +79,32 @@ impl RootSpanBuilder for RequestSpanBuilder {
             referrer
         );
 
+        // Store the starting time, so that response time can be measured.
+        request.extensions_mut().insert(curr_datetime());
+
         span
     }
 
-    fn on_request_end<B>(_span: Span, _outcome: &ActixResult<ServiceResponse<B>>) {}
+    fn on_request_end<B>(span: Span, outcome: &ActixResult<ServiceResponse<B>>) {
+        match outcome {
+            Ok(response) => {
+                let time_taken = if let Some(start_time) = response
+                    .request()
+                    .extensions()
+                    .get::<NaiveDateTime>()
+                    .cloned()
+                {
+                    format!("{}", curr_datetime() - start_time)
+                } else {
+                    // This should never happen, since `Self::on_request_start` should always store
+                    // the starting time.
+                    "-".into()
+                };
+                info!(target: TELEMETRY_TARGET, parent: &span, status=%response.status(), time_taken);
+            }
+            Err(error) => {
+                error!(target: TELEMETRY_TARGET, parent: &span, error=%error);
+            }
+        };
+    }
 }
