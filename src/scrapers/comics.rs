@@ -25,7 +25,7 @@ use html_escape::decode_html_entities;
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, instrument};
 
 use crate::client::HttpClient;
 use crate::constants::{SRC_COMIC_PREFIX, SRC_DATE_FMT};
@@ -93,6 +93,7 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
         // None would mean that the comic for this date wasn't cached, or the date is invalid (i.e.
         // it would redirect to the homepage).
         let comic_data: Option<ComicData> = conn.get(date).await?;
+        debug!("Retrieved data from DB: {comic_data:?}");
         Ok(comic_data.map(|comic_data| (comic_data, true)))
     }
 
@@ -104,6 +105,7 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
             return Ok(());
         };
 
+        debug!("Attempting to update cache with: {comic_data:?}");
         conn.set(date, comic_data).await?;
         info!("Successfully cached data for {date} in cache");
         Ok(())
@@ -131,6 +133,7 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
         };
 
         let bytes = resp.body().await?;
+        debug!("Got response body of length: {}B", bytes.len());
         let content = match std::str::from_utf8(&bytes) {
             Ok(text) => text,
             Err(_) => return Err(AppError::Scrape("Response is not UTF-8".into())),
@@ -149,6 +152,7 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
             decode_html_entities(&node.inner_text(parser)).into_owned()
         } else {
             // Some comics don't have a title. This is mostly for older comics.
+            debug!("No title found for comic on: {date}");
             String::new()
         };
 
@@ -198,12 +202,14 @@ impl<T: RedisPool> Scraper<ComicData, NaiveDate> for ComicScraper<T> {
             return Err(AppError::Scrape("Error in scraping the image's URL".into()));
         };
 
-        Ok(ComicData {
+        let comic_data = ComicData {
             title,
             img_url,
             img_width,
             img_height,
-        })
+        };
+        debug!("Scraped comic data: {comic_data:?}");
+        Ok(comic_data)
     }
 }
 

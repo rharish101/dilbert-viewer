@@ -35,7 +35,7 @@ use actix_web::{
     middleware::{Compress, DefaultHeaders},
     web, App, Error as WebError, HttpServer,
 };
-use tracing::error;
+use tracing::{error, info};
 use tracing_actix_web::TracingLogger;
 
 use crate::app::{serve_404, Viewer};
@@ -58,7 +58,11 @@ fn get_static_service() -> Files {
     if let Ok(bytes) = serve_404(None).into_body().try_into_bytes() {
         if let Ok(html) = std::str::from_utf8(&bytes) {
             service = service.index_file(html);
+        } else {
+            error!("Couldn't convert 404 page into UTF-8");
         }
+    } else {
+        error!("Couldn't render 404 page into bytes");
     }
     service
 }
@@ -117,5 +121,6 @@ pub async fn run(
         server = server.workers(workers);
     };
 
+    info!("Starting server at {host}");
     server.bind(host)?.run().await
 }

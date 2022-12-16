@@ -92,6 +92,10 @@ impl<T: RedisPool + Clone + 'static> Viewer<T> {
         // The date of the latest comic is often retrieved from the cache. If there is a comic for
         // a date which is newer than the cached value, then there is a new "latest comic".
         if latest_comic < date {
+            info!(
+                "Found comic \"{date}\" newer than known latest date ({latest_comic}); \
+                updating latest date..."
+            );
             latest_comic = date;
             // Cache the new value of the latest comic date
             self.latest_date_scraper.update_latest_date(&date).await?;
@@ -161,7 +165,7 @@ fn serve_template(
         .format(SRC_DATE_FMT)
         .to_string();
 
-    let webpage = ComicTemplate {
+    let template = ComicTemplate {
         data: comic_data,
         date_disp: &date.format(DISP_DATE_FMT).to_string(),
         date: &date.format(SRC_DATE_FMT).to_string(),
@@ -176,12 +180,12 @@ fn serve_template(
         ),
         app_url: APP_URL,
         repo_url: REPO_URL,
-    }
-    .render()?;
+    };
+    debug!("Rendering comic template: {template:?}");
 
     Ok(HttpResponse::Ok()
         .content_type(ContentType::html())
-        .body(minify_html(webpage)?))
+        .body(minify_html(template.render()?)?))
 }
 
 /// Serve the requested CSS file with minification, without handling errors.
@@ -225,14 +229,14 @@ pub async fn serve_css(path: &Path) -> HttpResponse {
 /// Serve a 404 not found response for invalid URLs, without handling errors.
 fn serve_404_raw(date: Option<&NaiveDate>) -> AppResult<HttpResponse> {
     let date_str = date.map(|date| date.format(SRC_DATE_FMT).to_string());
-    let webpage = NotFoundTemplate {
+    let template = NotFoundTemplate {
         date: date_str.as_deref(),
         repo_url: REPO_URL,
-    }
-    .render()?;
+    };
+    debug!("Rendering 404 template: {template:?}");
     Ok(HttpResponse::NotFound()
         .content_type(ContentType::html())
-        .body(minify_html(webpage)?))
+        .body(minify_html(template.render()?)?))
 }
 
 /// Serve a 404 not found response for invalid URLs.
@@ -261,14 +265,17 @@ pub fn serve_500(err: &AppError) -> HttpResponse {
         error,
         repo_url: REPO_URL,
     };
+    debug!("Rendering 500 template: {error_template:?}");
     match error_template.render() {
         Ok(webpage) => {
             // Minification can crash, so if it fails, just serve the original. Since
             // minification modifies the input, give it a clone.
-            let minified = if let Ok(html) = minify_html(webpage.clone()) {
-                html
-            } else {
-                webpage
+            let minified = match minify_html(webpage.clone()) {
+                Ok(html) => html,
+                Err(err) => {
+                    error!("HTML minification crashed with error: {err}");
+                    webpage
+                }
             };
             response.content_type(ContentType::html()).body(minified)
         }

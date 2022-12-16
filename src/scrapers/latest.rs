@@ -36,7 +36,7 @@ use crate::scrapers::Scraper;
 const LATEST_DATE_KEY: &str = "latest-date";
 
 /// Values stored for the latest date
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 struct LatestDateInfo {
     date: NaiveDate,
     last_check: NaiveDateTime,
@@ -95,10 +95,11 @@ impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
         let info: Option<LatestDateInfo> = conn.get(LATEST_DATE_KEY).await?;
 
         Ok(if let Some(info) = info {
-            debug!("Retrieved info from DB for latest date");
+            debug!("Retrieved info from DB: {info:?}");
             // The latest date is fresh if it has been updated within the last
             // `LATEST_DATE_REFRESH` hours.
             let last_fresh_time = curr_datetime() - Duration::hours(LATEST_DATE_REFRESH);
+            debug!("Checking freshness with time: {last_fresh_time}");
             Some((info.date, info.last_check >= last_fresh_time))
         } else {
             None
@@ -117,6 +118,7 @@ impl<T: RedisPool> Scraper<NaiveDate, ()> for LatestDateScraper<T> {
             date: date.to_owned(),
             last_check: curr_datetime(),
         };
+        debug!("Attempting to update cache with: {new_info:?}");
         conn.set(LATEST_DATE_KEY, &new_info).await?;
 
         info!("Successfully updated latest date in cache to: {date}");

@@ -23,6 +23,7 @@ use actix_web::{get, http::header::LOCATION, web, HttpResponse, Responder};
 use chrono::{Duration, NaiveDate};
 use deadpool_redis::Pool;
 use rand::{thread_rng, Rng};
+use tracing::info;
 
 use crate::app::{serve_404, serve_css, Viewer};
 use crate::constants::{FIRST_COMIC, SRC_DATE_FMT, STATIC_DIR};
@@ -34,6 +35,7 @@ async fn latest_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
     // If there is no comic for this date yet, "dilbert.com" will redirect to the homepage. The
     // code can handle this by instead showing the contents of the latest comic.
     let today = curr_date();
+    info!("Trying today's date ({today}) for latest comic on homepage");
 
     // If there is no comic for this date yet, we don't want to raise a 404, so just show the exact
     // latest date without a redirection (to preserve the URL and load faster).
@@ -52,6 +54,7 @@ async fn comic_page(
     if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
         viewer.serve_comic(date, false).await
     } else {
+        info!("Invalid date requested: ({year}-{month}-{day})");
         serve_404(None)
     }
 }
@@ -68,6 +71,7 @@ async fn random_comic() -> impl Responder {
     // Offset (in days) from the first date
     let rand_offset = rng.gen_range(0..(latest - first).num_days());
     let rand_date = first + Duration::days(rand_offset);
+    info!("Chose random comic date: {rand_date}");
 
     let location = format!("/{}", rand_date.format(SRC_DATE_FMT));
     HttpResponse::TemporaryRedirect()

@@ -20,7 +20,7 @@ use askama::Template;
 use crate::scrapers::ComicData;
 
 /// The main template for a comic
-#[derive(Template)]
+#[derive(Template, Debug)]
 #[template(path = "comic.html")]
 pub struct ComicTemplate<'a> {
     /// The scraped comic data
@@ -51,7 +51,7 @@ pub struct ComicTemplate<'a> {
 }
 
 /// The template for a 404 not found page
-#[derive(Template)]
+#[derive(Template, Debug)]
 #[template(path = "not_found.html")]
 pub struct NotFoundTemplate<'a> {
     /// The date of the requested comic, if available
@@ -61,7 +61,7 @@ pub struct NotFoundTemplate<'a> {
 }
 
 /// The template for a 500 internal server error page
-#[derive(Template)]
+#[derive(Template, Debug)]
 #[template(path = "error.html")]
 pub struct ErrorTemplate<'a> {
     /// The error message of the interval server error
