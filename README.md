@@ -35,6 +35,12 @@ If you want to run the viewer without a Redis database, then simply run it witho
 heroku local web
 ```
 
+To set the log level of the viewer, set the `RUST_LOG` environment variable according to [this specification](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives).
+For example, to view all logs at or above the `DEBUG` level, run:
+```sh
+RUST_LOG=debug heroku local web
+```
+
 ## Contributing
 [pre-commit](https://pre-commit.com/) is used for managing hooks that run before each commit (such as clippy), to ensure code quality.
 Thus, this needs to be set up only when one intends to commit changes to git.
