@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 use actix_web::{
+    body::{BodySize, MessageBody},
     dev::{ServiceRequest, ServiceResponse},
     http::header::{REFERER, USER_AGENT},
     HttpMessage, Result as ActixResult,
@@ -85,9 +86,14 @@ impl RootSpanBuilder for RequestSpanBuilder {
         span
     }
 
-    fn on_request_end<B>(span: Span, outcome: &ActixResult<ServiceResponse<B>>) {
+    fn on_request_end<B: MessageBody>(span: Span, outcome: &ActixResult<ServiceResponse<B>>) {
         match outcome {
             Ok(response) => {
+                let size = match response.response().body().size() {
+                    BodySize::Sized(size) => format!("{size}B"),
+                    BodySize::Stream => "-".into(),
+                    BodySize::None => "0B".into(),
+                };
                 let time_taken = if let Some(start_time) = response
                     .request()
                     .extensions()
@@ -100,7 +106,7 @@ impl RootSpanBuilder for RequestSpanBuilder {
                     // the starting time.
                     "-".into()
                 };
-                info!(target: TELEMETRY_TARGET, parent: &span, status=%response.status(), time_taken);
+                info!(target: TELEMETRY_TARGET, parent: &span, status=%response.status(), size, time_taken);
             }
             Err(error) => {
                 error!(target: TELEMETRY_TARGET, parent: &span, error=%error);
