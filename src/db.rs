@@ -18,10 +18,8 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use deadpool_redis::{
-    redis::{aio::ConnectionLike, AsyncCommands, RedisResult},
-    Config as RedisConfig, Connection, Pool, PoolError, Runtime,
-};
+use deadpool_redis::{Config as RedisConfig, Connection, Pool, PoolError, Runtime};
+use redis::{aio::ConnectionLike, AsyncCommands, RedisResult};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::constants::{DB_TIMEOUT, MAX_DB_CONN};

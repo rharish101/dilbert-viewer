@@ -18,7 +18,7 @@
 use std::env;
 
 use awc::error::{PayloadError, SendRequestError};
-use deadpool_redis::{redis::RedisError, BuildError, ConfigError, PoolError};
+use deadpool_redis::{BuildError, ConfigError, PoolError};
 use minify_html::Error as MinifyHtmlError;
 use thiserror::Error;
 
@@ -70,7 +70,7 @@ pub enum AppError {
     Pool(#[from] PoolError),
     /// Errors when executing a DB query
     #[error("Database error: {0}")]
-    Db(#[from] RedisError),
+    Db(#[from] redis::RedisError),
     /// Errors when serializing/deserializing a DB query argument/result
     #[error("(De)serialization error: {0}")]
     Serde(#[from] serde_json::Error),

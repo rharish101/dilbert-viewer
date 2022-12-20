@@ -165,7 +165,7 @@ mod tests {
 
     use actix_web::http::{Method, StatusCode};
     use chrono::{DateTime, Utc};
-    use deadpool_redis::redis::{Cmd, Value};
+    use redis::{Cmd, Value};
     use redis_test::{IntoRedisValue, MockCmd, MockRedisConnection};
     use test_case::test_case;
     use wiremock::{
