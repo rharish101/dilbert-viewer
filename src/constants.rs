@@ -66,8 +66,6 @@ pub const CSP: &str = "\
     default-src 'none';\
     img-src assets.amuniversal.com dilbert.com;\
     style-src 'self' cdn.jsdelivr.net";
-/// Target for telemetry log events
-pub const TELEMETRY_TARGET: &str = "telemetry";
 
 #[cfg(test)]
 mod tests {

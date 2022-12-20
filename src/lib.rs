@@ -32,17 +32,16 @@ use actix_files::Files;
 use actix_web::{
     body::MessageBody,
     dev::{ServiceRequest, ServiceResponse},
-    middleware::{Compress, DefaultHeaders},
+    middleware::{Compress, DefaultHeaders, Logger},
     web, App, Error as WebError, HttpServer,
 };
 use tracing::{error, info};
-use tracing_actix_web::TracingLogger;
 
 use crate::app::{serve_404, Viewer};
 use crate::constants::{CSP, SRC_BASE_URL, STATIC_DIR, STATIC_URL};
 use crate::db::get_db_pool;
 use crate::handlers::{comic_page, latest_comic, minify_css, random_comic};
-use crate::logging::RequestSpanBuilder;
+use crate::logging::TracingWrapper;
 
 /// Handle invalid URLs by sending 404s.
 ///
@@ -108,7 +107,11 @@ pub async fn run(
             .app_data(web::Data::new(viewer))
             .wrap(Compress::default())
             .wrap(default_headers)
-            .wrap(TracingLogger::<RequestSpanBuilder>::new())
+            .wrap(Logger::new(
+                "ip=%{r}a req_line=\"%r\" referer=\"%{Referer}i\" user_agent=\"%{User-Agent}i\" \
+                status=%s size=%bB time=%Ts",
+            ))
+            .wrap(TracingWrapper::default())
             .service(latest_comic)
             .service(comic_page)
             .service(random_comic)

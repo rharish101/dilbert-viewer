@@ -1,4 +1,4 @@
-//! Customization for the request logger middleware
+//! Wrapper that wraps all logs within a tracing span
 // This file is part of Dilbert Viewer.
 //
 // Copyright (C) 2022  Harish Rajagopal <harish.rajagopals@gmail.com>
@@ -15,102 +15,186 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
+//
+// This file incorporates work covered by the following copyright and
+// permission notice:
+//
+//     Copyright (C) 2020  Luca Palmieri <contact@lpalmieri.com>
+//
+//     Permission is hereby granted, free of charge, to any
+//     person obtaining a copy of this software and associated
+//     documentation files (the "Software"), to deal in the
+//     Software without restriction, including without
+//     limitation the rights to use, copy, modify, merge,
+//     publish, distribute, sublicense, and/or sell copies of
+//     the Software, and to permit persons to whom the Software
+//     is furnished to do so, subject to the following
+//     conditions:
+//
+//     The above copyright notice and this permission notice
+//     shall be included in all copies or substantial portions
+//     of the Software.
+//
+//     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+//     ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+//     TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+//     PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+//     SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+//     CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+//     OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+//     IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+//     DEALINGS IN THE SOFTWARE.
+use std::future::{ready, Future, Ready};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use actix_web::{
     body::{BodySize, MessageBody},
-    dev::{ServiceRequest, ServiceResponse},
-    http::header::{REFERER, USER_AGENT},
-    HttpMessage, Result as ActixResult,
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    web::Bytes,
+    Error,
 };
-use chrono::NaiveDateTime;
-use tracing::{error, info, info_span, Span};
-use tracing_actix_web::{RequestId, RootSpanBuilder};
+use pin_project::{pin_project, pinned_drop};
+use tracing::{info_span, Span};
+use uuid::Uuid;
 
-use crate::constants::TELEMETRY_TARGET;
-use crate::datetime::curr_datetime;
+#[derive(Default)]
+/// Wrapper for encapsulating all log events within a response to a request inside a span
+///
+/// This span will have a field that contains the unique ID for each request, which is used to
+/// distinguish log events for different request-responses.
+pub struct TracingWrapper;
 
-pub struct RequestSpanBuilder {}
+impl<S, B> Transform<S, ServiceRequest> for TracingWrapper
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+    B: MessageBody + 'static,
+{
+    type Response = ServiceResponse<StreamSpan<B>>;
+    type Error = Error;
+    type Transform = TracingMiddleware<S>;
+    type InitError = ();
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
-impl RootSpanBuilder for RequestSpanBuilder {
-    fn on_request_start(request: &ServiceRequest) -> Span {
-        let request_id = request
-            .extensions()
-            .get::<RequestId>()
-            .cloned()
-            .expect("Missing request ID");
-        let span = info_span!("request", id=%request_id);
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(TracingMiddleware { service }))
+    }
+}
 
-        let ip_addr = request
-            .connection_info()
-            .realip_remote_addr()
-            .unwrap_or("-")
-            .to_string();
+pub struct TracingMiddleware<S> {
+    service: S,
+}
 
-        // The first line of the HTTP request
-        let query = request.query_string();
-        let req_line = format!(
-            "{} {}{} {:?}",
-            request.method(),
-            request.path(),
-            if query.is_empty() {
-                String::new()
-            } else {
-                format!("?{query}")
-            },
-            request.version(),
-        );
+impl<S, B> Service<ServiceRequest> for TracingMiddleware<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+    B: MessageBody + 'static,
+{
+    type Response = ServiceResponse<StreamSpan<B>>;
+    type Error = Error;
+    type Future = TracingResponse<S::Future>;
 
-        let extract_header = |name| {
-            if let Some(value) = request.headers().get(name) {
-                value.to_str().unwrap_or("-")
-            } else {
-                "-"
-            }
-        };
-        let user_agent = extract_header(USER_AGENT);
-        let referrer = extract_header(REFERER);
+    forward_ready!(service);
 
-        // Record some request info within the "telemetry" target, so that the log level for
-        // telemetry can be independently set.
-        info!(
-            target: TELEMETRY_TARGET,
-            parent: &span,
-            ip_addr,
-            req_line,
-            user_agent,
-            referrer
-        );
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let root_span = info_span!("request", id=%Uuid::new_v4());
+        let fut = root_span.in_scope(|| self.service.call(req));
 
-        // Store the starting time, so that response time can be measured.
-        request.extensions_mut().insert(curr_datetime());
+        TracingResponse {
+            fut,
+            span: root_span,
+        }
+    }
+}
 
-        span
+#[pin_project]
+pub struct TracingResponse<F> {
+    #[pin]
+    fut: F,
+    span: Span,
+}
+
+#[pin_project(project = PinOptionProj)]
+/// A pinned version of `Option`, used for pinning the optional inner response body
+enum PinOption<T> {
+    None,
+    Some(#[pin] T),
+}
+
+#[pin_project(PinnedDrop)]
+pub struct StreamSpan<B> {
+    #[pin]
+    body: PinOption<B>,
+    span: Span,
+}
+
+impl<F, B> Future for TracingResponse<F>
+where
+    F: Future<Output = Result<ServiceResponse<B>, Error>>,
+    B: MessageBody + 'static,
+{
+    type Output = Result<ServiceResponse<StreamSpan<B>>, Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        let fut = this.fut;
+        let span = this.span;
+
+        span.in_scope(|| match fut.poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(outcome) => Poll::Ready(outcome.map(|service_response| {
+                service_response.map_body(|_, body| StreamSpan {
+                    body: PinOption::Some(body),
+                    span: span.clone(),
+                })
+            })),
+        })
+    }
+}
+
+impl<B> MessageBody for StreamSpan<B>
+where
+    B: MessageBody,
+{
+    type Error = B::Error;
+
+    fn size(&self) -> BodySize {
+        match &self.body {
+            PinOption::None => BodySize::None,
+            PinOption::Some(body) => body.size(),
+        }
     }
 
-    fn on_request_end<B: MessageBody>(span: Span, outcome: &ActixResult<ServiceResponse<B>>) {
-        match outcome {
-            Ok(response) => {
-                let size = match response.response().body().size() {
-                    BodySize::Sized(size) => format!("{size}B"),
-                    BodySize::Stream => "-".into(),
-                    BodySize::None => "0B".into(),
-                };
-                let time_taken = if let Some(start_time) = response
-                    .request()
-                    .extensions()
-                    .get::<NaiveDateTime>()
-                    .cloned()
-                {
-                    format!("{}", curr_datetime() - start_time)
-                } else {
-                    // This should never happen, since `Self::on_request_start` should always store
-                    // the starting time.
-                    "-".into()
-                };
-                info!(target: TELEMETRY_TARGET, parent: &span, status=%response.status(), size, time_taken);
-            }
-            Err(error) => {
-                error!(target: TELEMETRY_TARGET, parent: &span, error=%error);
-            }
-        };
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Bytes, Self::Error>>> {
+        let this = self.project();
+
+        let body = this.body;
+        let span = this.span;
+        match body.project() {
+            PinOptionProj::None => Poll::Ready(None),
+            PinOptionProj::Some(body) => span.in_scope(|| body.poll_next(cx)),
+        }
+    }
+}
+
+#[pinned_drop]
+impl<B> PinnedDrop for StreamSpan<B> {
+    /// Drop the inner body within the span by assigning `PinOption::None` to it.
+    // This is used to wrap `actix_web::middleware::Logger`'s log messages, since they log when
+    // they are dropped.
+    fn drop(self: Pin<&mut Self>) {
+        let this = self.project();
+
+        let span = this.span;
+        let mut body = this.body;
+        span.in_scope(|| {
+            body.set(PinOption::None);
+        });
     }
 }

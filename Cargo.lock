@@ -829,6 +829,7 @@ dependencies = [
  "minify-html-onepass",
  "mockall",
  "mockall_double",
+ "pin-project",
  "portpicker",
  "rand 0.8.5",
  "rcgen",
@@ -843,9 +844,9 @@ dependencies = [
  "tl",
  "tokio",
  "tracing",
- "tracing-actix-web",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid",
  "wiremock",
 ]
 
@@ -2515,18 +2516,6 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
-]
-
-[[package]]
-name = "tracing-actix-web"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7488d9441c630ea4cbde433aaccf00749ff306ffe1fda1cf13dfb06c85aceecd"
-dependencies = [
- "actix-web",
- "pin-project",
- "tracing",
- "uuid",
 ]
 
 [[package]]
