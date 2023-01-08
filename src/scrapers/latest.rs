@@ -262,7 +262,7 @@ mod tests {
 
         // Mock the datetime with the expected `last_check` time, otherwise a different one will be
         // used by the scraper during cache storage.
-        let faketime_file = mock_time_file(DateTime::from_utc(latest_date_info.last_check, Utc));
+        let faketime_file = mock_time_file(&DateTime::from_utc(latest_date_info.last_check, Utc));
         faketime::enable(&faketime_file);
 
         // The HTTP client shouldn't be used, so make the base URL empty.

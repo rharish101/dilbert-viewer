@@ -39,7 +39,7 @@ async fn latest_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
 
     // If there is no comic for this date yet, we don't want to raise a 404, so just show the exact
     // latest date without a redirection (to preserve the URL and load faster).
-    viewer.serve_comic(today, true).await
+    viewer.serve_comic(&today, true).await
 }
 
 /// Serve the comic requested in the given URL.
@@ -52,7 +52,7 @@ async fn comic_page(
 
     // Check to see if the date is invalid.
     if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
-        viewer.serve_comic(date, false).await
+        viewer.serve_comic(&date, false).await
     } else {
         info!("Invalid date requested: ({year}-{month}-{day})");
         serve_404(None)

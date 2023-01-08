@@ -43,7 +43,7 @@ pub mod mock {
         }
     }
 
-    pub fn mock_time_file(datetime: DateTime<Utc>) -> TempPath {
+    pub fn mock_time_file(datetime: &DateTime<Utc>) -> TempPath {
         match u64::try_from(datetime.timestamp_millis()) {
             Ok(millis) => millis_tempfile(millis).expect("Couldn't set mock time"),
             Err(err) => panic!("Couldn't set mock time: {err}"),
@@ -98,7 +98,7 @@ mod tests {
         let mock_datetime =
             DateTime::<chrono::Utc>::from_utc(expected.and_hms_opt(0, 0, 0).unwrap(), chrono::Utc);
 
-        let faketime_file = mock_time_file(mock_datetime);
+        let faketime_file = mock_time_file(&mock_datetime);
         faketime::enable(&faketime_file);
 
         let returned = curr_date();
@@ -118,7 +118,7 @@ mod tests {
             .expect("Invalid test parameters");
         let mock_datetime = DateTime::<chrono::Utc>::from_utc(expected, chrono::Utc);
 
-        let faketime_file = mock_time_file(mock_datetime);
+        let faketime_file = mock_time_file(&mock_datetime);
         faketime::enable(&faketime_file);
 
         let returned = curr_datetime();

@@ -54,51 +54,48 @@ impl<T: RedisPool + Clone + 'static> Viewer<T> {
     /// Get the info about the requested comic and the latest date.
     async fn get_comic_info(
         &self,
-        date: NaiveDate,
+        date: &NaiveDate,
         show_latest: bool,
     ) -> AppResult<(ComicData, NaiveDate)> {
         // Execute both in parallel, as they are independent of each other.
         let (comic_data_res, latest_comic_res) = futures::join!(
-            self.comic_scraper.get_comic_data(&date),
+            self.comic_scraper.get_comic_data(date),
             self.latest_date_scraper.get_latest_date()
         );
         let mut latest_comic = latest_comic_res?;
 
-        let (comic_data, date) = if let Some(comic_data) = comic_data_res? {
-            (comic_data, date)
+        let comic_data = if let Some(comic_data) = comic_data_res? {
+            // The date of the latest comic is often retrieved from the cache. If there is a comic for
+            // a date which is newer than the cached value, then there is a new "latest comic".
+            if latest_comic < *date {
+                info!(
+                    "Found comic \"{date}\" newer than known latest date ({latest_comic}); \
+                    updating latest date..."
+                );
+                latest_comic = *date;
+                // Cache the new value of the latest comic date
+                self.latest_date_scraper.update_latest_date(date).await?;
+            };
+            comic_data
         } else {
             // The data is None if the input is invalid (i.e. "dilbert.com" has redirected to the
             // homepage).
-            if show_latest {
-                info!(
-                    "No comic found for {date}, instead displaying the latest comic \
-                    ({latest_comic})",
-                );
-                let comic_data = self.comic_scraper.get_comic_data(&latest_comic).await?;
-                if let Some(comic_data) = comic_data {
-                    (comic_data, latest_comic)
-                } else {
-                    // This means that the "latest date", either from the DB or by scraping,
-                    // doesn't have a comic. This should NEVER happen.
-                    return Err(AppError::Internal(
-                        "No comic found for the latest date".into(),
-                    ));
-                }
-            } else {
+            if !show_latest {
                 return Err(AppError::NotFound(format!("No comic found for {date}")));
-            }
-        };
-
-        // The date of the latest comic is often retrieved from the cache. If there is a comic for
-        // a date which is newer than the cached value, then there is a new "latest comic".
-        if latest_comic < date {
+            };
             info!(
-                "Found comic \"{date}\" newer than known latest date ({latest_comic}); \
-                updating latest date..."
+                "No comic found for {date}, instead displaying the latest comic ({latest_comic})",
             );
-            latest_comic = date;
-            // Cache the new value of the latest comic date
-            self.latest_date_scraper.update_latest_date(&date).await?;
+            let comic_data = self.comic_scraper.get_comic_data(&latest_comic).await?;
+            if let Some(comic_data) = comic_data {
+                comic_data
+            } else {
+                // This means that the "latest date", either from the DB or by scraping,
+                // doesn't have a comic. This should NEVER happen.
+                return Err(AppError::Internal(
+                    "No comic found for the latest date".into(),
+                ));
+            }
         };
 
         Ok((comic_data, latest_comic))
@@ -112,16 +109,16 @@ impl<T: RedisPool + Clone + 'static> Viewer<T> {
     /// * `date` - The date of the requested comic
     /// * `show_latest` - If there is no comic found for this date, then whether to show the latest
     ///                   comic
-    pub async fn serve_comic(&self, date: NaiveDate, show_latest: bool) -> HttpResponse {
+    pub async fn serve_comic(&self, date: &NaiveDate, show_latest: bool) -> HttpResponse {
         match self
             .get_comic_info(date, show_latest)
             .await
             // If `show_latest` is true, then it's possible that `date` is later than the latest
             // comic date. Hence, use `min` to correct it.
-            .and_then(|info| serve_template(min(date, info.1), &info.0, info.1))
+            .and_then(|info| serve_template(&min(*date, info.1), &info.0, &info.1))
         {
             Ok(response) => response,
-            Err(AppError::NotFound(..)) => serve_404(Some(&date)),
+            Err(AppError::NotFound(..)) => serve_404(Some(date)),
             Err(err) => serve_500(&err),
         }
     }
@@ -151,17 +148,17 @@ fn minify_html(mut html: String) -> AppResult<String> {
 /// * `comic_data` - The scraped comic data
 /// * `latest_comic` - The date of the latest comic
 fn serve_template(
-    date: NaiveDate,
+    date: &NaiveDate,
     comic_data: &ComicData,
-    latest_comic: NaiveDate,
+    latest_comic: &NaiveDate,
 ) -> AppResult<HttpResponse> {
     let first_comic = str_to_date(FIRST_COMIC, SRC_DATE_FMT)?;
 
     // Links to previous and next comics
-    let previous_comic = &max(first_comic, date - Duration::days(1))
+    let previous_comic = &max(first_comic, *date - Duration::days(1))
         .format(SRC_DATE_FMT)
         .to_string();
-    let next_comic = &min(latest_comic, date + Duration::days(1))
+    let next_comic = &min(*latest_comic, *date + Duration::days(1))
         .format(SRC_DATE_FMT)
         .to_string();
 
@@ -172,7 +169,7 @@ fn serve_template(
         first_comic: FIRST_COMIC,
         previous_comic,
         next_comic,
-        disable_left_nav: date == first_comic,
+        disable_left_nav: *date == first_comic,
         disable_right_nav: date == latest_comic,
         permalink: &format!(
             "{SRC_BASE_URL}/{SRC_COMIC_PREFIX}{}",
@@ -376,7 +373,7 @@ mod tests {
             img_width: 1,
             img_height: 1,
         };
-        let resp = serve_template(comic_date, &comic_data, latest_date)
+        let resp = serve_template(&comic_date, &comic_data, &latest_date)
             .expect("Error generating comic page");
 
         assert_eq!(resp.status(), StatusCode::OK, "Response is not status OK");
@@ -589,7 +586,7 @@ mod tests {
         let show_latest = matches!(state, GetComicInfoState::RedirectToLatest);
         let (viewer, comic_date, comic_data, expected_latest_date) = get_mock_viewer(state);
 
-        match viewer.get_comic_info(comic_date, show_latest).await {
+        match viewer.get_comic_info(&comic_date, show_latest).await {
             Ok((result_data, result_latest_date)) => {
                 assert_eq!(result_data, comic_data, "Viewer returned wrong comic data");
                 assert_eq!(
@@ -622,7 +619,7 @@ mod tests {
         };
 
         let (viewer, comic_date, _, _) = get_mock_viewer(state);
-        let resp = viewer.serve_comic(comic_date, show_latest).await;
+        let resp = viewer.serve_comic(&comic_date, show_latest).await;
         assert_eq!(resp.status(), expected_status);
 
         // When the viewer is redirected to the latest date, the HTML content should not use the
