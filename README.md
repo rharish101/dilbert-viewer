@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2022 Harish Rajagopal <harish.rajagopals@gmail.com>
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Dilbert Viewer
 [![Tests](https://img.shields.io/github/actions/workflow/status/rharish101/dilbert-viewer/tests.yml?branch=main&label=Tests&logo=github&style=flat-square)](https://github.com/rharish101/dilbert-viewer/actions/workflows/tests.yml)
 [![Deployment](https://img.shields.io/github/deployments/rharish101/dilbert-viewer/dilbert-viewer?label=Deployment&logo=heroku&style=flat-square)](https://dilbert-viewer.herokuapp.com)
@@ -55,3 +61,10 @@ For testing your changes using the provided test suite, run all tests as follows
 ```sh
 cargo test
 ```
+
+## Licenses
+This repository uses [REUSE](https://reuse.software/) to document licenses.
+Each file either has a header containing copyright and license information, or has an entry in the [DEP5 file](https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/) at [.reuse/dep5](./.reuse/dep5).
+The license files that are used in this project can be found in the [LICENSES](./LICENSES) directory.
+
+A copy of the AGPL-3.0-or-later license is placed in [LICENSE](./LICENSE), to signify that it constitutes the majority of the codebase, and for compatibility with GitHub.

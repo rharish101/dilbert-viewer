@@ -1,22 +1,10 @@
+// SPDX-FileCopyrightText: 2022 Harish Rajagopal <harish.rajagopals@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! The public interface for running the viewer app
 //!
 //! This file is separated from `main.rs` for the sole purpose of integration testing.
-// This file is part of Dilbert Viewer.
-//
-// Copyright (C) 2022  Harish Rajagopal <harish.rajagopals@gmail.com>
-//
-// Dilbert Viewer is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published
-// by the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// Dilbert Viewer is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with Dilbert Viewer.  If not, see <https://www.gnu.org/licenses/>.
 mod app;
 mod client;
 mod constants;
