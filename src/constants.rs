@@ -9,7 +9,7 @@
 /// Date of the first ever Dilbert comic
 pub const FIRST_COMIC: &str = "1989-04-16";
 /// Date of the last available Dilbert comic
-pub const LAST_COMIC: &str = "2023-03-09";
+pub const LAST_COMIC: &str = "2023-03-12";
 /// Date format used for URLs on "dilbert.com"
 pub const SRC_DATE_FMT: &str = "%Y-%m-%d";
 /// Date format used for display with the comic on "dilbert.com"
@@ -33,8 +33,9 @@ pub const DB_TIMEOUT: u64 = 3;
 // ==================================================
 // Miscellaneous
 // ==================================================
-/// Base URL for "dilbert.com"
-pub const SRC_BASE_URL: &str = "https://web.archive.org/web/https://dilbert.com";
+/// Base URL for "dilbert.com" archives
+// The timestamp should match the last date when "dilbert.com" was available
+pub const SRC_BASE_URL: &str = "https://web.archive.org/web/20230312/https://dilbert.com";
 /// URL path prefix for each comic on "dilbert.com"
 pub const SRC_COMIC_PREFIX: &str = "strip/";
 /// Link to the public version of this app
