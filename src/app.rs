@@ -5,7 +5,6 @@
 //! The viewer app struct and its methods
 use std::cmp::{max, min};
 use std::path::Path;
-use std::rc::Rc;
 
 use actix_web::{http::header::ContentType, HttpResponse};
 use askama::Template;
@@ -20,7 +19,9 @@ use crate::constants::{
 use crate::datetime::str_to_date;
 use crate::db::RedisPool;
 use crate::errors::{AppError, AppResult, MinificationError};
-use crate::scrapers::{ComicData, ComicScraper};
+use crate::scraper::ComicData;
+#[mockall_double::double]
+use crate::scraper::ComicScraper;
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 
 pub struct Viewer<T: RedisPool + 'static> {
@@ -31,10 +32,8 @@ pub struct Viewer<T: RedisPool + 'static> {
 impl<T: RedisPool + Clone + 'static> Viewer<T> {
     /// Initialize all necessary stuff for the viewer.
     pub fn new(db: Option<T>, base_url: String) -> Self {
-        let http_client = Rc::new(HttpClient::new(base_url));
-        Self {
-            comic_scraper: ComicScraper::new(db, http_client),
-        }
+        let comic_scraper = ComicScraper::new(db, HttpClient::new(base_url));
+        Self { comic_scraper }
     }
 
     /// Get the info about the requested comic.

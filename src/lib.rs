@@ -13,7 +13,7 @@ mod db;
 mod errors;
 mod handlers;
 mod logging;
-mod scrapers;
+mod scraper;
 mod templates;
 
 use actix_files::Files;

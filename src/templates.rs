@@ -5,7 +5,7 @@
 //! Contains structs for HTML templates
 use askama::Template;
 
-use crate::scrapers::ComicData;
+use crate::scraper::ComicData;
 
 /// The main template for a comic
 #[derive(Template, Debug)]
