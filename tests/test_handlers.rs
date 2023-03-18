@@ -12,7 +12,7 @@ use awc::{
     },
     Client, ClientResponse,
 };
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use dilbert_viewer::run;
 use portpicker::pick_unused_port;
 use test_case::test_case;
@@ -27,6 +27,8 @@ const HOST: &str = "localhost";
 const RESP_TIMEOUT: u64 = 5;
 /// Date of the first ever Dilbert comic
 const FIRST_COMIC: &str = "1989-04-16";
+/// Date of the last available Dilbert comic
+const LAST_COMIC: &str = "2023-03-09";
 /// Date format used for URLs on "dilbert.com"
 const SRC_DATE_FMT: &str = "%Y-%m-%d";
 /// Path to the directory where test scraping files are stored
@@ -64,23 +66,22 @@ async fn test_content_type<T>(resp: ClientResponse<T>, expected: &str) {
 
 #[test_case("2000-01-01"; "sample date")]
 #[actix_web::test]
-/// Test whether the homepage gives the latest comic.
+/// Test whether the homepage gives the last comic.
 ///
 /// # Arguments
-/// * `html_file_stem` - The file stem to the HTML page that is to be served for the latest date.
-async fn test_latest_comic(html_file_stem: &str) {
+/// * `html_file_stem` - The file stem to the HTML page that is to be served for the last date.
+async fn test_last_comic(html_file_stem: &str) {
     let port = pick_unused_port().expect("Couldn't find an available port");
     let host = format!("{HOST}:{port}");
 
-    // Set up the mock server to serve the comic for the mocked latest date.
+    // Set up the mock server to serve the comic for the mocked last date.
     let mock_server = MockServer::start().await;
     let html =
         tokio::fs::read_to_string(format!("{SCRAPING_TEST_CASE_PATH}/{html_file_stem}.html"))
             .await
             .expect("Couldn't get test page for scraping");
-    let today = Utc::now().date_naive();
     Mock::given(method(Method::GET.as_str()))
-        .and(path(format!("/strip/{}", today.format(SRC_DATE_FMT))))
+        .and(path(format!("/strip/{LAST_COMIC}")))
         .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html))
         .mount(&mock_server)
         .await;
@@ -137,15 +138,6 @@ async fn test_comic(year: i32, month: u32, day: u32) {
             .await;
     }
 
-    // Mock the latest date.
-    let today = Utc::now().date_naive();
-    Mock::given(method(Method::GET.as_str()))
-        .and(path(format!("/strip/{}", today.format(SRC_DATE_FMT))))
-        // Response body shouldn't matter, so keep it empty.
-        .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()))
-        .mount(&mock_server)
-        .await;
-
     // Start the server on a single thread.
     let handle = spawn(run(host.clone(), None, Some(mock_server.uri()), Some(1)));
 
@@ -178,7 +170,7 @@ async fn test_random_comic() {
 
     let client = get_http_client();
     let first_comic = NaiveDate::parse_from_str(FIRST_COMIC, SRC_DATE_FMT).unwrap();
-    let today = Utc::now().date_naive();
+    let last_comic = NaiveDate::parse_from_str(LAST_COMIC, SRC_DATE_FMT).unwrap();
 
     for _ in 0..RAND_TEST_ITER {
         let resp = client
@@ -203,7 +195,7 @@ async fn test_random_comic() {
         let random_date = NaiveDate::parse_from_str(&location[1..], SRC_DATE_FMT)
             .expect("Redirected to invalid date");
         assert!(
-            random_date >= first_comic && random_date <= today,
+            random_date >= first_comic && random_date <= last_comic,
             "Redirected to invalid date"
         );
     }

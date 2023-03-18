@@ -4,7 +4,6 @@
 
 //! The module containing the scrapers
 mod comics;
-mod latest;
 mod scraper;
 
 use mockall_double::double;
@@ -13,6 +12,4 @@ use mockall_double::double;
 pub use comics::ComicData;
 #[double]
 pub use comics::ComicScraper;
-#[double]
-pub use latest::LatestDateScraper;
 pub use scraper::Scraper;

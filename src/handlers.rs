@@ -14,20 +14,17 @@ use rand::{thread_rng, Rng};
 use tracing::info;
 
 use crate::app::{serve_404, serve_css, Viewer};
-use crate::constants::{FIRST_COMIC, SRC_DATE_FMT, STATIC_DIR};
-use crate::datetime::{curr_date, str_to_date};
+use crate::constants::{FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT, STATIC_DIR};
+use crate::datetime::str_to_date;
 
-/// Serve the latest comic.
+/// Serve the last comic.
 #[get("/")]
-async fn latest_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
+async fn last_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
     // If there is no comic for this date yet, "dilbert.com" will redirect to the homepage. The
-    // code can handle this by instead showing the contents of the latest comic.
-    let today = curr_date();
-    info!("Trying today's date ({today}) for latest comic on homepage");
-
-    // If there is no comic for this date yet, we don't want to raise a 404, so just show the exact
-    // latest date without a redirection (to preserve the URL and load faster).
-    viewer.serve_comic(&today, true).await
+    // code can handle this by instead showing the contents of the last comic.
+    let last = str_to_date(LAST_COMIC, SRC_DATE_FMT)
+        .expect("Variable LAST_COMIC not in format of variable SRC_DATE_FMT");
+    viewer.serve_comic(&last).await
 }
 
 /// Serve the comic requested in the given URL.
@@ -40,7 +37,7 @@ async fn comic_page(
 
     // Check to see if the date is invalid.
     if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
-        viewer.serve_comic(&date, false).await
+        viewer.serve_comic(&date).await
     } else {
         info!("Invalid date requested: ({year}-{month}-{day})");
         serve_404(None)
@@ -52,12 +49,12 @@ async fn comic_page(
 async fn random_comic() -> impl Responder {
     let first = str_to_date(FIRST_COMIC, SRC_DATE_FMT)
         .expect("Variable FIRST_COMIC not in format of variable SRC_DATE_FMT");
-    // There might not be any comic for this date yet, so exclude the latest date.
-    let latest = curr_date() - Duration::days(1);
+    let last = str_to_date(LAST_COMIC, SRC_DATE_FMT)
+        .expect("Variable LAST_COMIC not in format of variable SRC_DATE_FMT");
 
     let mut rng = thread_rng();
     // Offset (in days) from the first date
-    let rand_offset = rng.gen_range(0..(latest - first).num_days());
+    let rand_offset = rng.gen_range(0..(last - first).num_days());
     let rand_date = first + Duration::days(rand_offset);
     info!("Chose random comic date: {rand_date}");
 

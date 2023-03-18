@@ -161,7 +161,7 @@ mod tests {
                 GetCacheState::Fresh => Ok(Some((expected, true))),
                 GetCacheState::Stale => Ok(Some((expected, false))),
                 GetCacheState::NotFound => Ok(None),
-                GetCacheState::Fail => Err(AppError::Internal("Manual error".into())),
+                GetCacheState::Fail => Err(AppError::Scrape("Manual error".into())),
             });
 
         // Mock cache storage.
@@ -169,7 +169,7 @@ mod tests {
             if storage_works {
                 Ok(())
             } else {
-                Err(AppError::Internal("Manual error".into()))
+                Err(AppError::Scrape("Manual error".into()))
             }
         });
 
@@ -178,7 +178,7 @@ mod tests {
             if scrape_works {
                 Ok(expected)
             } else {
-                Err(AppError::Internal("Manual error".into()))
+                Err(AppError::Scrape("Manual error".into()))
             }
         });
 

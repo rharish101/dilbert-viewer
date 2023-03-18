@@ -80,9 +80,6 @@ pub enum AppError {
     /// Errors in minifying HTML/CSS
     #[error("Minification error: {0}")]
     Minify(#[from] MinificationError),
-    /// Miscellaneous internal errors
-    #[error("Internal error: {0}")]
-    Internal(String),
     /// Errors in scraping info from "dilbert.com"
     #[error("Scraping error: {0}")]
     Scrape(String),

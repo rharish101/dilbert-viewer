@@ -21,10 +21,7 @@ impl HttpClient {
     /// Initialize the HTTP client session.
     pub fn new(base_url: String) -> Self {
         let timeout = Duration::from_secs(RESP_TIMEOUT);
-        let client = Client::builder()
-            .disable_redirects()
-            .timeout(timeout)
-            .finish();
+        let client = Client::builder().timeout(timeout).finish();
         Self { client, base_url }
     }
 
