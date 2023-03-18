@@ -28,7 +28,7 @@ const RESP_TIMEOUT: u64 = 5;
 /// Date of the first ever Dilbert comic
 const FIRST_COMIC: &str = "1989-04-16";
 /// Date of the last available Dilbert comic
-const LAST_COMIC: &str = "2023-03-09";
+const LAST_COMIC: &str = "2023-03-12";
 /// Date format used for URLs on "dilbert.com"
 const SRC_DATE_FMT: &str = "%Y-%m-%d";
 /// Path to the directory where test scraping files are stored
