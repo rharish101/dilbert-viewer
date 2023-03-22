@@ -29,18 +29,12 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   <img class="img-fluid my-3 px-2" alt="Comic for {{ date }}" src="{{ data.img_url }}" width="{{ data.img_width }}" height="{{ data.img_height }}" />
 
   <!-- Navigation buttons -->
-  <nav class="d-flex flex-row flex-nowrap btn-toolbar m-2" aria-label="Navigation buttons">
-    <div class="btn-group m-1" role="group" aria-label="Go backwards buttons">
-      <a href="/{{ first_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="First comic">&lt&lt</a>
-      <a href="/{{ previous_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="Previous comic">&lt</a>
-    </div>
-    <div class="btn-group m-1" role="group" aria-label="Center buttons">
-      <a href="/random" role="button" class="btn btn-primary" aria-label="Random comic">Random</a>
-    </div>
-    <div class="btn-group m-1" role="group" aria-label="Go forwards buttons">
-      <a href="/{{ next_comic }}" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Next comic">&gt</a>
-      <a href="/" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Latest comic">&gt&gt</a>
-    </div>
+  <nav class="d-flex flex-row flex-nowrap gap-2 m-2" aria-label="Navigation buttons">
+    <a href="/{{ first_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="First comic">&lt&lt</a>
+    <a href="/{{ previous_comic }}" role="button" class="btn btn-primary{% if disable_left_nav %} disabled{% endif %}" aria-disabled="{% if disable_left_nav %}true{% else %}false{% endif %}" aria-label="Previous comic">&lt</a>
+    <a href="/random" role="button" class="btn btn-primary" aria-label="Random comic">Random</a>
+    <a href="/{{ next_comic }}" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Next comic">&gt</a>
+    <a href="/" role="button" class="btn btn-primary{% if disable_right_nav %} disabled{% endif %}" aria-disabled="{% if disable_right_nav %}true{% else %}false{% endif %}" aria-label="Latest comic">&gt&gt</a>
   </nav>
 
   <!-- Links to the source comic on "dilbert.com" -->
