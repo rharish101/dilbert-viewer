@@ -391,8 +391,8 @@ mod tests {
             .expect("Failed to set comic data in cache");
     }
 
-    #[test_case((2000, 1, 1), false, ("", "https://web.archive.org/web/20230304055427im_/https://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
-    #[test_case((2020, 1, 1), false, ("Rfp Process", "https://web.archive.org/web/20230307033313im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
+    #[test_case((2000, 1, 1), false, ("", "https://web.archive.org/web/20150226185430im_/http://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
+    #[test_case((2020, 1, 1), false, ("Rfp Process", "//web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
     #[test_case((2000, 1, 1), true, ("", "", 0, 0); "missing")]
     #[actix_web::test]
     /// Test comic scraping.
