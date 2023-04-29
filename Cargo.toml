@@ -19,7 +19,7 @@ askama = "0.11.0"
 async-trait = "0.1.52"
 awc = { version = "3.0.1", features = ["rustls"] }
 chrono = { version = "0.4.19", features = ["serde", "std"], default-features = false }
-deadpool-redis = "0.11.0"
+deadpool-redis = "0.12.0"
 futures = "0.3.19"
 html-escape = "0.2.9"
 minifier = "0.2.2"
@@ -28,7 +28,7 @@ mockall_double = "0.3.0"
 pin-project = "1.0.12"
 portpicker = "0.1.1"
 rand = "0.8.4"
-redis = { version = "0.22.1", features = ["json", "tokio-native-tls-comp"] }
+redis = { version = "0.23.0", features = ["json", "tokio-rustls-comp"] }
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.89"
 thiserror = "1.0.34"
@@ -49,7 +49,7 @@ deadpool = "0.9.5"
 mockall = "0.11.3"
 rcgen = "0.10.0"
 redis-test = { version = "0.1.1", features = ["aio"] }
-rustls = "0.20.7"
+rustls = "0.21.0"
 tempfile = "3.4.0"
 test-case = "2.2.2"
 wiremock = "0.5.15"
