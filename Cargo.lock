@@ -699,7 +699,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f1760f60ffc6653b4afd924c5792098d8c00d9a3deb6b3d989eac17949dc422"
 dependencies = [
  "deadpool",
- "redis 0.23.0",
+ "redis",
 ]
 
 [[package]]
@@ -772,9 +772,9 @@ dependencies = [
  "portpicker",
  "rand 0.8.5",
  "rcgen",
- "redis 0.23.0",
+ "redis",
  "redis-test",
- "rustls 0.21.0",
+ "rustls 0.20.8",
  "serde",
  "serde_json",
  "tempfile",
@@ -1800,26 +1800,6 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.22.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa8455fa3621f6b41c514946de66ea0531f57ca017b2e6c7cc368035ea5b46df"
-dependencies = [
- "async-trait",
- "bytes",
- "combine",
- "futures-util",
- "itoa",
- "percent-encoding",
- "pin-project-lite",
- "ryu",
- "sha1_smol",
- "tokio",
- "tokio-util",
- "url",
-]
-
-[[package]]
-name = "redis"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ea8c51b5dc1d8e5fd3350ec8167f464ec0995e79f2e90a075b63371500d557f"
@@ -1845,12 +1825,12 @@ dependencies = [
 
 [[package]]
 name = "redis-test"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e9ceb100979db7292de8a3d4ecdde659cccc85133303ea0741e1618a5bd73df"
+checksum = "5a65cf43f8d361cb6351892d742c05935822ba3772530890ea5596edefa98d20"
 dependencies = [
  "futures",
- "redis 0.22.3",
+ "redis",
 ]
 
 [[package]]
