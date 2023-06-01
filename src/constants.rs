@@ -53,7 +53,8 @@ pub const CSP: &str = "\
     default-src 'none';\
     img-src assets.amuniversal.com dilbert.com web.archive.org;\
     style-src 'self' cdn.jsdelivr.net;\
-    script-src 'self'";
+    script-src 'self';\
+    frame-ancestors 'none'";
 
 #[cfg(test)]
 mod tests {
