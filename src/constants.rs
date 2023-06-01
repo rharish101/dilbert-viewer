@@ -52,7 +52,8 @@ pub const STATIC_DIR: &str = "static/";
 pub const CSP: &str = "\
     default-src 'none';\
     img-src assets.amuniversal.com dilbert.com web.archive.org;\
-    style-src 'self' cdn.jsdelivr.net";
+    style-src 'self' cdn.jsdelivr.net;\
+    script-src 'self'";
 
 #[cfg(test)]
 mod tests {
