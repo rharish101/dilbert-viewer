@@ -18,6 +18,8 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   <meta property="og:url" content="{{ app_url }}{{ date }}" />
   <meta property="og:description" content="Dilbert comic strip on {{ date_disp }}, viewed using a simple comic viewer." />
   <meta name="twitter:card" content="summary_large_image" />
+  {% if !disable_left_nav %}<link rel="prefetch" href="/{{ previous_comic }}" />{% endif %}
+  {% if !disable_right_nav %}<link rel="prefetch" href="/{{ next_comic }}" />{% endif %}
 {% endblock %}
 
 {% block content %}
