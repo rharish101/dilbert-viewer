@@ -205,6 +205,7 @@ async fn test_random_comic() {
 }
 
 #[test_case("styles.css", StatusCode::OK, "text/css"; "css")]
+#[test_case("script.js", StatusCode::OK, "text/javascript"; "js")]
 #[test_case("robots.txt", StatusCode::OK, "text/plain"; "misc")]
 #[test_case("foo", StatusCode::NOT_FOUND, "text/html"; "non-existant")]
 #[test_case("//", StatusCode::NOT_FOUND, "text/html"; "existing directory")]

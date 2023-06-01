@@ -28,7 +28,7 @@ use tracing::{error, info};
 use crate::app::{serve_404, Viewer};
 use crate::constants::{CSP, SRC_BASE_URL, STATIC_DIR, STATIC_URL};
 use crate::db::get_db_pool;
-use crate::handlers::{comic_page, last_comic, minify_css, random_comic};
+use crate::handlers::{comic_page, last_comic, minify_css, minify_js, random_comic};
 use crate::logging::TracingWrapper;
 
 /// Handle invalid URLs by sending 404s.
@@ -104,6 +104,7 @@ pub async fn run(
             .service(comic_page)
             .service(random_comic)
             .service(minify_css)
+            .service(minify_js)
             // This should be at the end, otherwise everything after this will be ignored.
             .service(static_service)
     });

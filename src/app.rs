@@ -121,22 +121,27 @@ fn serve_template(date: &NaiveDate, comic_data: &ComicData) -> AppResult<HttpRes
         .body(minify_html(template.render()?)?))
 }
 
-/// Serve the requested CSS file with minification, without handling errors.
-async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
-    let css = match tokio::fs::read(path).await {
+/// Load a file from disk
+async fn load_file(path: &Path) -> AppResult<String> {
+    let file = match tokio::fs::read(path).await {
         Ok(text) => text,
         Err(err) => return Err(AppError::NotFound(err.to_string())),
     };
-    let css_str = std::str::from_utf8(&css)?;
+    Ok(std::str::from_utf8(&file)?.to_string())
+}
 
-    let minified = match minifier::css::minify(css_str) {
+/// Serve the requested CSS file with minification, without handling errors.
+async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
+    let css = load_file(path).await?;
+
+    let minified = match minifier::css::minify(&css) {
         Ok(minified) => minified.to_string(),
         Err(err) => return Err(MinificationError::Css(err.into()).into()),
     };
     debug!(
         "Minified \"{}\" from {} bytes to {}",
         path.display(),
-        css_str.len(),
+        css.len(),
         minified.len()
     );
 
@@ -153,6 +158,37 @@ async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
 /// * `path` - The path to the CSS file
 pub async fn serve_css(path: &Path) -> HttpResponse {
     match serve_css_raw(path).await {
+        Ok(resp) => resp,
+        Err(AppError::NotFound(..)) => serve_404(None),
+        Err(err) => serve_500(&err),
+    }
+}
+
+/// Serve the requested JavaScript file with minification, without handling errors.
+async fn serve_js_raw(path: &Path) -> AppResult<HttpResponse> {
+    let js = load_file(path).await?;
+
+    let minified = minifier::js::minify(&js).to_string();
+    debug!(
+        "Minified \"{}\" from {} bytes to {}",
+        path.display(),
+        js.len(),
+        minified.len()
+    );
+
+    Ok(HttpResponse::Ok()
+        .content_type("text/javascript;charset=utf-8")
+        .body(minified))
+}
+
+/// Serve the requested JavaScript file with minification.
+///
+/// If an error is raised, then a 500 internal server error response is returned.
+///
+/// # Arguments
+/// * `path` - The path to the JavaScript file
+pub async fn serve_js(path: &Path) -> HttpResponse {
+    match serve_js_raw(path).await {
         Ok(resp) => resp,
         Err(AppError::NotFound(..)) => serve_404(None),
         Err(err) => serve_500(&err),

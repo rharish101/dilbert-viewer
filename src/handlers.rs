@@ -13,7 +13,7 @@ use deadpool_redis::Pool;
 use rand::{thread_rng, Rng};
 use tracing::info;
 
-use crate::app::{serve_404, serve_css, Viewer};
+use crate::app::{serve_404, serve_css, serve_js, Viewer};
 use crate::constants::{FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT, STATIC_DIR};
 use crate::datetime::str_to_date;
 
@@ -70,4 +70,12 @@ async fn minify_css(path: web::Path<String>) -> impl Responder {
     let stem = path.into_inner();
     let css_path = Path::new(STATIC_DIR).join(stem + ".css");
     serve_css(&css_path).await
+}
+
+/// Serve JS after minification.
+#[get("/{path}.js")]
+async fn minify_js(path: web::Path<String>) -> impl Responder {
+    let stem = path.into_inner();
+    let js_path = Path::new(STATIC_DIR).join(stem + ".js");
+    serve_js(&js_path).await
 }
