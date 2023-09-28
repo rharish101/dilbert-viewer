@@ -99,7 +99,7 @@ pub async fn run(
                 "ip=%{r}a req_line=\"%r\" referer=\"%{Referer}i\" user_agent=\"%{User-Agent}i\" \
                 status=%s size=%bB time=%Ts",
             ))
-            .wrap(TracingWrapper::default())
+            .wrap(TracingWrapper)
             .service(last_comic)
             .service(comic_page)
             .service(random_comic)
