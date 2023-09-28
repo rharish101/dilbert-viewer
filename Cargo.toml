@@ -15,15 +15,15 @@ license = "AGPL-3.0-or-later"
 [dependencies]
 actix-files = "0.6.0"
 actix-web = "4.0.1"
-askama = "0.11.0"
+askama = "0.12.0"
 async-trait = "0.1.52"
 awc = { version = "3.0.1", features = ["rustls"] }
 chrono = { version = "0.4.19", features = ["serde", "std"], default-features = false }
-deadpool-redis = "0.12.0"
+deadpool-redis = "0.13.0"
 futures = "0.3.19"
 html-escape = "0.2.9"
 minifier = "0.2.2"
-minify-html = { version = "0.10.2", package = "minify-html-onepass" }
+minify-html = { version = "0.11.1", package = "minify-html-onepass" }
 mockall_double = "0.3.0"
 pin-project = "1.0.12"
 portpicker = "0.1.1"
@@ -44,12 +44,12 @@ lto = true
 
 [dev-dependencies]
 actix-web = { version = "4.0.1", features = ["rustls"] }
-content-security-policy = "0.4.2"
-deadpool = "0.9.5"
+content-security-policy = "0.5.1"
+deadpool = "0.10.0"
 mockall = "0.11.3"
-rcgen = "0.10.0"
+rcgen = "0.11.2"
 redis-test = { version = "0.2.0", features = ["aio"] }
 rustls = "0.20.8"
 tempfile = "3.4.0"
-test-case = "2.2.2"
+test-case = "3.2.1"
 wiremock = "0.5.15"
