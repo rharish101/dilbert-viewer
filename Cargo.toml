@@ -14,7 +14,7 @@ license = "AGPL-3.0-or-later"
 
 [dependencies]
 actix-files = "0.6.0"
-actix-web = "4.0.1"
+actix-web = "4.5.1"
 askama = "0.12.0"
 async-trait = "0.1.52"
 awc = { version = "3.0.1", features = ["rustls"] }
@@ -43,13 +43,13 @@ uuid = { version = "1.2.2", features = ["v4"] }
 lto = true
 
 [dev-dependencies]
-actix-web = { version = "4.0.1", features = ["rustls"] }
+actix-web = { version = "4.5.1", features = ["rustls-0_22"] }
 content-security-policy = "0.5.1"
 deadpool = "0.10.0"
 mockall = "0.11.3"
-rcgen = "0.11.2"
+rcgen = "0.12.1"
 redis-test = { version = "0.2.0", features = ["aio"] }
-rustls = "0.20.8"
+rustls = "0.22.4"
 tempfile = "3.4.0"
 test-case = "3.2.1"
 wiremock = "0.5.15"

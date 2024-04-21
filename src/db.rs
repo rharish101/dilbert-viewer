@@ -114,7 +114,7 @@ mod tests {
     use actix_web::{rt::spawn, App, HttpServer};
     use portpicker::pick_unused_port;
     use rcgen::generate_simple_self_signed;
-    use rustls::{Certificate, PrivateKey, ServerConfig};
+    use rustls::{pki_types::PrivatePkcs8KeyDer, ServerConfig};
 
     #[actix_web::test]
     /// Test the database connection pool initialization.
@@ -134,19 +134,19 @@ mod tests {
             .to_string()])
         .expect("Couldn't generate TLS certificates");
         let tls_config = ServerConfig::builder()
-            .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(
-                vec![Certificate(
-                    cert.serialize_der().expect("Couldn't generate TLS cert"),
-                )],
-                PrivateKey(cert.serialize_private_key_der()),
+                vec![cert
+                    .serialize_der()
+                    .expect("Couldn't generate TLS cert")
+                    .into()],
+                PrivatePkcs8KeyDer::from(cert.serialize_private_key_der()).into(),
             )
             .expect("Invalid TLS cert/key");
 
         // Start the mock TLS server on a single thread.
         let tls_server = HttpServer::new(App::new)
-            .bind_rustls(host.clone(), tls_config)
+            .bind_rustls_0_22(host.clone(), tls_config)
             .expect("Couldn't bind mock server to host")
             .workers(1);
         let handle = spawn(tls_server.run());
