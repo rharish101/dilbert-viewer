@@ -26,7 +26,7 @@ use actix_web::{
 use tracing::{error, info};
 
 use crate::app::{serve_404, Viewer};
-use crate::constants::{CSP, SRC_BASE_URL, STATIC_DIR, STATIC_URL};
+use crate::constants::{ARC_BASE_URL, CDX_URL, CSP, STATIC_DIR, STATIC_URL};
 use crate::db::get_db_pool;
 use crate::handlers::{comic_page, last_comic, minify_css, minify_js, random_comic};
 use crate::logging::TracingWrapper;
@@ -60,11 +60,13 @@ fn get_static_service() -> Files {
 /// * `host` - The host and port where to start the server
 /// * `db_url` - The optional URL to the database
 /// * `source_url` - The optional URL to the custom comic source
+/// * `cdx_url` - The optional URL to the custom comic source
 /// * `workers` - The optional number of workers to use
 pub async fn run(
     host: String,
     db_url: Option<String>,
     source_url: Option<String>,
+    cdx_url: Option<String>,
     workers: Option<usize>,
 ) -> std::io::Result<()> {
     // Create all worker-shared (i.e. thread-safe) structs here
@@ -85,7 +87,8 @@ pub async fn run(
         // Create all worker-specific (i.e. thread-unsafe) structs here
         let viewer = Viewer::new(
             db_pool.clone(),
-            source_url.clone().unwrap_or_else(|| SRC_BASE_URL.into()),
+            source_url.clone().unwrap_or_else(|| ARC_BASE_URL.into()),
+            cdx_url.clone().unwrap_or_else(|| CDX_URL.into()),
         );
         let static_service = get_static_service();
         Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);

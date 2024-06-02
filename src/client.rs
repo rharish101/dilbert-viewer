@@ -14,20 +14,19 @@ use crate::constants::RESP_TIMEOUT;
 /// Allowing the base URL to change is useful when mocking it in tests.
 pub struct HttpClient {
     client: Client,
-    base_url: String,
 }
 
 impl HttpClient {
     /// Initialize the HTTP client session.
-    pub fn new(base_url: String) -> Self {
+    pub fn new() -> Self {
         let timeout = Duration::from_secs(RESP_TIMEOUT);
         let client = Client::builder().timeout(timeout).finish();
-        Self { client, base_url }
+        Self { client }
     }
 
     /// Perform a GET request for the given URL path.
     pub fn get(&self, path: &str) -> ClientRequest {
-        self.client.get(format!("{}/{path}", self.base_url))
+        self.client.get(path)
     }
 }
 
@@ -49,9 +48,9 @@ mod tests {
             .await;
 
         // See if the client can actually connect and get a response.
-        let http_client = HttpClient::new(mock_server.uri());
+        let http_client = HttpClient::new();
         let resp = http_client
-            .get("")
+            .get(&mock_server.uri())
             .send()
             .await
             .expect("Failed to connect to mock server");

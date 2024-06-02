@@ -85,9 +85,20 @@ async fn test_last_comic(html_file_stem: &str) {
         .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html))
         .mount(&mock_server)
         .await;
+    Mock::given(method(Method::GET.as_str()))
+        .and(path("/cdx"))
+        .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string("2000"))
+        .mount(&mock_server)
+        .await;
 
     // Start the server on a single thread.
-    let handle = spawn(run(host.clone(), None, Some(mock_server.uri()), Some(1)));
+    let handle = spawn(run(
+        host.clone(),
+        None,
+        Some(mock_server.uri()),
+        Some(format!("{}/cdx", mock_server.uri())),
+        Some(1),
+    ));
 
     let client = get_http_client();
     let resp = client
@@ -138,8 +149,21 @@ async fn test_comic(year: i32, month: u32, day: u32) {
             .await;
     }
 
+    // Mock the Wayback Machine timestamp from the CDX API.
+    Mock::given(method(Method::GET.as_str()))
+        .and(path("/cdx"))
+        .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string("2000"))
+        .mount(&mock_server)
+        .await;
+
     // Start the server on a single thread.
-    let handle = spawn(run(host.clone(), None, Some(mock_server.uri()), Some(1)));
+    let handle = spawn(run(
+        host.clone(),
+        None,
+        Some(mock_server.uri()),
+        Some(format!("{}/cdx", mock_server.uri())),
+        Some(1),
+    ));
 
     let client = get_http_client();
     let resp = client
@@ -166,7 +190,13 @@ async fn test_random_comic() {
     // Start the server on a single thread.
     // The random comic generator shouldn't make any request to "dilbert.com", so make the URL
     // empty.
-    let handle = spawn(run(host.clone(), None, Some(String::new()), Some(1)));
+    let handle = spawn(run(
+        host.clone(),
+        None,
+        Some(String::new()),
+        Some(String::new()),
+        Some(1),
+    ));
 
     let client = get_http_client();
     let first_comic = NaiveDate::parse_from_str(FIRST_COMIC, SRC_DATE_FMT).unwrap();
@@ -222,7 +252,13 @@ async fn test_static(path: &str, status_code: StatusCode, content_type: &str) {
 
     // Start the server on a single thread.
     // The static file service shouldn't make any request to "dilbert.com", so make the URL empty.
-    let handle = spawn(run(host.clone(), None, Some(String::new()), Some(1)));
+    let handle = spawn(run(
+        host.clone(),
+        None,
+        Some(String::new()),
+        Some(String::new()),
+        Some(1),
+    ));
 
     let client = get_http_client();
     let resp = client

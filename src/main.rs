@@ -80,5 +80,5 @@ async fn main() -> std::io::Result<()> {
         None
     };
 
-    dilbert_viewer::run(host, db_url, None, None).await
+    dilbert_viewer::run(host, db_url, None, None, None).await
 }

@@ -33,9 +33,14 @@ pub const DB_TIMEOUT: u64 = 3;
 // ==================================================
 // Miscellaneous
 // ==================================================
-/// Base URL for "dilbert.com" archives
-// The search date (after /web/) is chosen to minimize the chance of getting an improper archive.
-pub const SRC_BASE_URL: &str = "https://web.archive.org/web/2018/https://dilbert.com";
+/// Base URL for "dilbert.com"
+pub const SRC_BASE_URL: &str = "https://dilbert.com/";
+/// Base URL for Wayback Machine lookups
+pub const ARC_BASE_URL: &str = "https://web.archive.org/web/{}/https://dilbert.com";
+/// URL for archive.org CDX API
+// Docs: https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server
+pub const CDX_URL: &str =
+    "https://web.archive.org/cdx/search/cdx?url={}&fl=timestamp&filter=statuscode:^2&limit=-1";
 /// URL path prefix for each comic on "dilbert.com"
 pub const SRC_COMIC_PREFIX: &str = "strip/";
 /// Link to the public version of this app

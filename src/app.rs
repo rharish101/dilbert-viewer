@@ -12,10 +12,7 @@ use chrono::{Duration, NaiveDate};
 use tracing::{debug, error};
 
 use crate::client::HttpClient;
-use crate::constants::{
-    APP_URL, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, REPO_URL, SRC_BASE_URL, SRC_COMIC_PREFIX,
-    SRC_DATE_FMT,
-};
+use crate::constants::{APP_URL, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, REPO_URL, SRC_DATE_FMT};
 use crate::datetime::str_to_date;
 use crate::db::RedisPool;
 use crate::errors::{AppError, AppResult, MinificationError};
@@ -31,8 +28,8 @@ pub struct Viewer<T: RedisPool + 'static> {
 
 impl<T: RedisPool + Clone + 'static> Viewer<T> {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db: Option<T>, base_url: String) -> Self {
-        let comic_scraper = ComicScraper::new(db, HttpClient::new(base_url));
+    pub fn new(db: Option<T>, base_url: String, cdx_url: String) -> Self {
+        let comic_scraper = ComicScraper::new(db, HttpClient::new(), base_url, cdx_url);
         Self { comic_scraper }
     }
 
@@ -107,10 +104,7 @@ fn serve_template(date: &NaiveDate, comic_data: &ComicData) -> AppResult<HttpRes
         next_comic,
         disable_left_nav: *date == first_comic,
         disable_right_nav: *date == last_comic,
-        permalink: &format!(
-            "{SRC_BASE_URL}/{SRC_COMIC_PREFIX}{}",
-            date.format(SRC_DATE_FMT)
-        ),
+        permalink: &comic_data.permalink,
         app_url: APP_URL,
         repo_url: REPO_URL,
     };
@@ -330,6 +324,7 @@ mod tests {
             img_url: REPO_URL.into(), // Any URL should technically work.
             img_width: 1,
             img_height: 1,
+            permalink: String::new(),
         };
         let resp = serve_template(&comic_date, &comic_data).expect("Error generating comic page");
 
@@ -458,6 +453,7 @@ mod tests {
             img_url: String::new(),
             img_width: 0,
             img_height: 0,
+            permalink: String::new(),
         };
 
         // Set up the mock comic scraper.

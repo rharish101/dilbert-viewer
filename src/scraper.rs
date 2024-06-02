@@ -14,7 +14,7 @@ use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::client::HttpClient;
-use crate::constants::{SRC_COMIC_PREFIX, SRC_DATE_FMT};
+use crate::constants::{SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT};
 use crate::db::{RedisPool, SerdeAsyncCommands};
 use crate::errors::{AppError, AppResult};
 
@@ -33,6 +33,9 @@ pub struct ComicData {
 
     /// The height of the image
     pub img_height: i32,
+
+    /// The permalink to the comic
+    pub permalink: String,
 }
 
 mod inner {
@@ -44,14 +47,26 @@ mod inner {
     pub(super) struct InnerComicScraper<T: RedisPool + 'static> {
         pub(super) db: Option<T>,
         pub(super) http_client: HttpClient,
+        pub(super) base_url: String,
+        pub(super) cdx_url: String,
     }
 
     #[cfg_attr(test, automock)]
     impl<T: RedisPool + 'static> InnerComicScraper<T> {
         /// Initialize a comics scraper.
         #[cfg_attr(test, allow(dead_code))]
-        pub fn new(db: Option<T>, http_client: HttpClient) -> Self {
-            Self { db, http_client }
+        pub fn new(
+            db: Option<T>,
+            http_client: HttpClient,
+            base_url: String,
+            cdx_url: String,
+        ) -> Self {
+            Self {
+                db,
+                http_client,
+                base_url,
+                cdx_url,
+            }
         }
 
         /// Get the cached comic data from the database.
@@ -95,7 +110,20 @@ mod inner {
         /// Scrape the comic data of the requested date from the source.
         pub(super) async fn scrape_data(&self, date: &NaiveDate) -> AppResult<ComicData> {
             let path = format!("{SRC_COMIC_PREFIX}{}", date.format(SRC_DATE_FMT));
-            let mut resp = self.http_client.get(&path).send().await?;
+            let mut resp = self
+                .http_client
+                .get(&self.cdx_url.replace("{}", &format!("{SRC_BASE_URL}{path}")))
+                .send()
+                .await?;
+            let bytes = resp.body().await?;
+            debug!("Got CDX API response body of length: {}B", bytes.len());
+            let timestamp = match std::str::from_utf8(&bytes) {
+                Ok(text) => text.trim(),
+                Err(_) => return Err(AppError::Scrape("CDX API response is not UTF-8".into())),
+            };
+
+            let permalink = format!("{}/{path}", self.base_url.replace("{}", timestamp));
+            let mut resp = self.http_client.get(&permalink).send().await?;
             let status = resp.status();
 
             match status {
@@ -188,6 +216,7 @@ mod inner {
                 img_url,
                 img_width,
                 img_height,
+                permalink,
             };
             debug!("Scraped comic data: {comic_data:?}");
             Ok(comic_data)
@@ -209,8 +238,13 @@ mod comic {
     impl<T: RedisPool + 'static> ComicScraper<T> {
         /// Initialize a comics scraper.
         #[cfg_attr(test, allow(dead_code))]
-        pub fn new(db: Option<T>, http_client: HttpClient) -> Self {
-            Self(InnerComicScraper::new(db, http_client))
+        pub fn new(
+            db: Option<T>,
+            http_client: HttpClient,
+            base_url: String,
+            cdx_url: String,
+        ) -> Self {
+            Self(InnerComicScraper::new(db, http_client, base_url, cdx_url))
         }
 
         /// Retrieve the data for the requested comic.
@@ -313,6 +347,7 @@ mod tests {
             img_url: String::new(),
             img_width: 0,
             img_height: 0,
+            permalink: String::new(),
         };
         let expected = match status {
             GetCacheState::Fresh => {
@@ -339,11 +374,13 @@ mod tests {
             panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
-        // The HTTP client shouldn't be used, so make the base URL empty.
-        let http_client = HttpClient::new(String::new());
+        let http_client = HttpClient::new();
         let scraper = InnerComicScraper {
             db: Some(db),
             http_client,
+            // The HTTP client shouldn't be used, so make the URLs empty.
+            base_url: String::new(),
+            cdx_url: String::new(),
         };
         let result = scraper
             .get_cached_data(&date)
@@ -365,6 +402,7 @@ mod tests {
             img_url: String::new(),
             img_width: 0,
             img_height: 0,
+            permalink: String::new(),
         };
 
         // Set up the mock Redis command that the scraper is expected to request.
@@ -379,11 +417,13 @@ mod tests {
             panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
-        // The HTTP client shouldn't be used, so make the base URL empty.
-        let http_client = HttpClient::new(String::new());
+        let http_client = HttpClient::new();
         let scraper = InnerComicScraper {
             db: Some(db),
             http_client,
+            // The HTTP client shouldn't be used, so make the URLs empty.
+            base_url: String::new(),
+            cdx_url: String::new(),
         };
         scraper
             .cache_data(&comic_data, &date)
@@ -408,19 +448,29 @@ mod tests {
         comic_data: (&str, &str, i32, i32),
     ) {
         let mock_server = MockServer::start().await;
-        let http_client = HttpClient::new(mock_server.uri());
+        let http_client = HttpClient::new();
         let date = NaiveDate::from_ymd_opt(date_ymd.0, date_ymd.1, date_ymd.2)
             .expect("Invalid test parameters");
 
         // The DB shouldn't be used, so use a pool with no connections.
         let db = Some(MockPool::new(0));
-        let scraper = InnerComicScraper { db, http_client };
+        let scraper = InnerComicScraper {
+            db,
+            http_client,
+            base_url: mock_server.uri(),
+            cdx_url: format!("{}/cdx", mock_server.uri()),
+        };
 
         let expected = ComicData {
             title: comic_data.0.into(),
             img_url: comic_data.1.into(),
             img_width: comic_data.2,
             img_height: comic_data.3,
+            permalink: format!(
+                "{}/{SRC_COMIC_PREFIX}{}",
+                mock_server.uri(),
+                date.format(SRC_DATE_FMT)
+            ),
         };
 
         let date_str = date.format(SRC_DATE_FMT).to_string();
@@ -443,15 +493,28 @@ mod tests {
             .mount(&mock_server)
             .await;
 
+        // Set up the mock server to return a bogus timestamp for the base URL, because this is
+        // what the CDX URL is.
+        Mock::given(method(Method::GET.as_str()))
+            .and(path("/cdx"))
+            .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string("2000"))
+            .mount(&mock_server)
+            .await;
+
         // The scraping should fail if and only if the server redirects.
-        if let Ok(result) = scraper.scrape_data(&date).await {
-            if missing {
-                panic!("Somehow scraped a missing comic");
-            } else {
-                assert_eq!(result, expected, "Scraped the wrong comic data");
+        match scraper.scrape_data(&date).await {
+            Ok(result) => {
+                if missing {
+                    panic!("Somehow scraped a missing comic");
+                } else {
+                    assert_eq!(result, expected, "Scraped the wrong comic data");
+                }
             }
-        } else if !missing {
-            panic!("Failed to scrape comic data");
+            Err(err) => {
+                if !missing {
+                    panic!("Failed to scrape comic data: {err}")
+                }
+            }
         };
     }
 
@@ -482,6 +545,7 @@ mod tests {
             img_url: String::new(),
             img_width: 0,
             img_height: 0,
+            permalink: String::new(),
         };
         let mut mock_scraper = MockInnerComicScraper::<MockPool>::default();
 
