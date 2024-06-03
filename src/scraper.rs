@@ -4,17 +4,17 @@
 
 //! Scraper to get info for requested Dilbert comics
 
-use awc::http::StatusCode;
+use awc::{http::StatusCode, Client};
 use chrono::NaiveDate;
 use html_escape::decode_html_entities;
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::client::HttpClient;
-use crate::constants::{SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT};
+use crate::constants::{RESP_TIMEOUT, SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT};
 use crate::db::{RedisPool, SerdeAsyncCommands};
 use crate::errors::{AppError, AppResult};
 
@@ -46,7 +46,7 @@ mod inner {
     /// This is separated out for the sole purpose of mock tests.
     pub(super) struct InnerComicScraper<T: RedisPool + 'static> {
         pub(super) db: Option<T>,
-        pub(super) http_client: HttpClient,
+        pub(super) http_client: Client,
         pub(super) base_url: String,
         pub(super) cdx_url: String,
     }
@@ -55,12 +55,9 @@ mod inner {
     impl<T: RedisPool + 'static> InnerComicScraper<T> {
         /// Initialize a comics scraper.
         #[cfg_attr(test, allow(dead_code))]
-        pub fn new(
-            db: Option<T>,
-            http_client: HttpClient,
-            base_url: String,
-            cdx_url: String,
-        ) -> Self {
+        pub fn new(db: Option<T>, base_url: String, cdx_url: String) -> Self {
+            let timeout = Duration::from_secs(RESP_TIMEOUT);
+            let http_client = Client::builder().timeout(timeout).finish();
             Self {
                 db,
                 http_client,
@@ -238,13 +235,8 @@ mod comic {
     impl<T: RedisPool + 'static> ComicScraper<T> {
         /// Initialize a comics scraper.
         #[cfg_attr(test, allow(dead_code))]
-        pub fn new(
-            db: Option<T>,
-            http_client: HttpClient,
-            base_url: String,
-            cdx_url: String,
-        ) -> Self {
-            Self(InnerComicScraper::new(db, http_client, base_url, cdx_url))
+        pub fn new(db: Option<T>, base_url: String, cdx_url: String) -> Self {
+            Self(InnerComicScraper::new(db, base_url, cdx_url))
         }
 
         /// Retrieve the data for the requested comic.
@@ -374,14 +366,8 @@ mod tests {
             panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
-        let http_client = HttpClient::new();
-        let scraper = InnerComicScraper {
-            db: Some(db),
-            http_client,
-            // The HTTP client shouldn't be used, so make the URLs empty.
-            base_url: String::new(),
-            cdx_url: String::new(),
-        };
+        // The HTTP client shouldn't be used, so make the URLs empty.
+        let scraper = InnerComicScraper::new(Some(db), String::new(), String::new());
         let result = scraper
             .get_cached_data(&date)
             .await
@@ -417,14 +403,8 @@ mod tests {
             panic!("Couldn't add mock DB connection to mock DB pool: {err}");
         };
 
-        let http_client = HttpClient::new();
-        let scraper = InnerComicScraper {
-            db: Some(db),
-            http_client,
-            // The HTTP client shouldn't be used, so make the URLs empty.
-            base_url: String::new(),
-            cdx_url: String::new(),
-        };
+        // The HTTP client shouldn't be used, so make the URLs empty.
+        let scraper = InnerComicScraper::new(Some(db), String::new(), String::new());
         scraper
             .cache_data(&comic_data, &date)
             .await
@@ -448,18 +428,13 @@ mod tests {
         comic_data: (&str, &str, i32, i32),
     ) {
         let mock_server = MockServer::start().await;
-        let http_client = HttpClient::new();
         let date = NaiveDate::from_ymd_opt(date_ymd.0, date_ymd.1, date_ymd.2)
             .expect("Invalid test parameters");
 
         // The DB shouldn't be used, so use a pool with no connections.
         let db = Some(MockPool::new(0));
-        let scraper = InnerComicScraper {
-            db,
-            http_client,
-            base_url: mock_server.uri(),
-            cdx_url: format!("{}/cdx", mock_server.uri()),
-        };
+        let scraper =
+            InnerComicScraper::new(db, mock_server.uri(), format!("{}/cdx", mock_server.uri()));
 
         let expected = ComicData {
             title: comic_data.0.into(),

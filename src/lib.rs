@@ -6,7 +6,6 @@
 //!
 //! This file is separated from `main.rs` for the sole purpose of integration testing.
 mod app;
-mod client;
 mod constants;
 mod datetime;
 mod db;

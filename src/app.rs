@@ -11,7 +11,6 @@ use askama::Template;
 use chrono::{Duration, NaiveDate};
 use tracing::{debug, error};
 
-use crate::client::HttpClient;
 use crate::constants::{APP_URL, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, REPO_URL, SRC_DATE_FMT};
 use crate::datetime::str_to_date;
 use crate::db::RedisPool;
@@ -29,7 +28,7 @@ pub struct Viewer<T: RedisPool + 'static> {
 impl<T: RedisPool + Clone + 'static> Viewer<T> {
     /// Initialize all necessary stuff for the viewer.
     pub fn new(db: Option<T>, base_url: String, cdx_url: String) -> Self {
-        let comic_scraper = ComicScraper::new(db, HttpClient::new(), base_url, cdx_url);
+        let comic_scraper = ComicScraper::new(db, base_url, cdx_url);
         Self { comic_scraper }
     }
 
