@@ -41,6 +41,8 @@ pub const ARC_BASE_URL: &str = "https://web.archive.org/web/{}/https://dilbert.c
 // Docs: https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server
 pub const CDX_URL: &str =
     "https://web.archive.org/cdx/search/cdx?url={}&fl=timestamp&filter=statuscode:^2&limit=-1&to=20230312";
+/// Fallback timestamp for the Wayback Machine
+pub const ARC_TIMESTAMP_FALLBACK: &str = "2018";
 /// URL path prefix for each comic on "dilbert.com"
 pub const SRC_COMIC_PREFIX: &str = "strip/";
 /// Link to the public version of this app
