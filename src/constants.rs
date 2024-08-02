@@ -32,6 +32,8 @@ pub const ARC_BASE_URL: &str =
 /// URL for archive.org CDX API
 // Docs: https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server
 pub const CDX_URL: &str = "https://web.archive.org/cdx/search/cdx?url=https://dilbert.com/strip/{date}&fl=timestamp&filter=statuscode:^2&limit=-1&to=20230312";
+/// Fallback timestamp for the Wayback Machine, if the CDX API fetch fails
+pub const CDX_TIMESTAMP_FALLBACK: &str = "2018";
 
 // ==================================================
 // Parameters related to the database
