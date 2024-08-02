@@ -14,7 +14,9 @@ use std::time::Duration;
 use tl::{parse as parse_html, Bytes, Node, ParserOptions};
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::constants::{RESP_TIMEOUT, SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT};
+use crate::constants::{
+    ARC_TIMESTAMP_FALLBACK, RESP_TIMEOUT, SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT,
+};
 use crate::db::{RedisPool, SerdeAsyncCommands};
 use crate::errors::{AppError, AppResult};
 
@@ -104,26 +106,44 @@ mod inner {
             Ok(())
         }
 
-        /// Scrape the comic data of the requested date from the source.
-        pub(super) async fn scrape_data(&self, date: &NaiveDate) -> AppResult<ComicData> {
+        /// Use the Wayback Machine CDX API to get the archived link.
+        pub(super) async fn get_archive_link(&self, date: &NaiveDate) -> AppResult<String> {
             let path = format!("{SRC_COMIC_PREFIX}{}", date.format(SRC_DATE_FMT));
             let mut resp = self
                 .http_client
                 .get(&self.cdx_url.replace("{}", &format!("{SRC_BASE_URL}{path}")))
                 .send()
                 .await?;
-            let bytes = resp.body().await?;
-            debug!("Got CDX API response body of length: {}B", bytes.len());
-            let timestamp = match std::str::from_utf8(&bytes) {
-                Ok(text) => text.trim(),
-                Err(_) => return Err(AppError::Scrape("CDX API response is not UTF-8".into())),
+            let status = resp.status();
+            let link = match status {
+                StatusCode::OK => {
+                    let bytes = resp.body().await?;
+                    debug!("Got CDX API response body of length: {}B", bytes.len());
+                    let timestamp = match std::str::from_utf8(&bytes) {
+                        Ok(text) => text.trim(),
+                        Err(_) => {
+                            return Err(AppError::Scrape("CDX API response is not UTF-8".into()))
+                        }
+                    };
+                    info!("Found timestamp {timestamp} for comic on date: {date}");
+                    format!("{}/{path}", self.base_url.replace("{}", timestamp))
+                }
+                _ => {
+                    error!("Unexpected CDX response status: {status}");
+                    format!(
+                        "{}/{path}",
+                        self.base_url.replace("{}", ARC_TIMESTAMP_FALLBACK)
+                    )
+                }
             };
+            Ok(link)
+        }
 
-            let permalink = format!("{}/{path}", self.base_url.replace("{}", timestamp));
-            debug!("CDX API timestamp: {timestamp}, permalink: {permalink}");
+        /// Scrape the comic data of the requested date from the source.
+        pub(super) async fn scrape_data(&self, date: &NaiveDate) -> AppResult<ComicData> {
+            let permalink = self.get_archive_link(date).await?;
             let mut resp = self.http_client.get(&permalink).send().await?;
             let status = resp.status();
-
             match status {
                 StatusCode::FOUND => {
                     // Redirected to homepage, implying that there's no comic for this date
@@ -208,6 +228,19 @@ mod inner {
             } else {
                 return Err(AppError::Scrape("Error in scraping the image's URL".into()));
             };
+
+            // TODO: Replace with the redirected-to link.
+            // See:
+            // - https://github.com/actix/actix-web/discussions/3387
+            // - https://github.com/actix/actix-web/issues/3403
+            // - https://github.com/actix/actix-web/pull/3535
+            // let permalink_uri = resp.req_head().uri;
+            // let permalink = format!(
+            //     "{}://{}{}",
+            //     permalink_uri.scheme_str(),
+            //     permalink_uri.host(),
+            //     permalink_uri.path()
+            // );
 
             let comic_data = ComicData {
                 title,
@@ -412,41 +445,117 @@ mod tests {
             .expect("Failed to set comic data in cache");
     }
 
-    #[test_case((2000, 1, 1), false, ("", "https://web.archive.org/web/20150226185430im_/http://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
-    #[test_case((2020, 1, 1), false, ("Rfp Process", "//web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
-    #[test_case((2000, 1, 1), true, ("", "", 0, 0); "missing")]
+    #[test_case((2000, 1, 1), Some("20200101"); "valid timestamp")]
+    #[test_case((2000, 1, 1), None; "API failure")]
     #[actix_web::test]
-    /// Test comic scraping.
+    /// Test multiple scenarios of retrieving timestamps from the CDX API.
     ///
     /// # Arguments
     /// * `date_ymd` - A tuple containing the year, month and day for the comic
-    /// * `missing` - Whether the comic is to be indicated as missing
-    /// * `comic_data` - The tuple for the comic data containing the title, image URL, image width
-    ///                  and image height
-    async fn test_comic_scraping(
-        date_ymd: (i32, u32, u32),
-        missing: bool,
-        comic_data: (&str, &str, i32, i32),
-    ) {
+    /// * `timestamp` - The timestamp to be detected, None if the CDX API is to fail
+    async fn test_get_cdx_timestamp(date_ymd: (i32, u32, u32), timestamp: Option<&str>) {
         let mock_server = MockServer::start().await;
         let date = NaiveDate::from_ymd_opt(date_ymd.0, date_ymd.1, date_ymd.2)
             .expect("Invalid test parameters");
 
         // The DB shouldn't be used, so use a pool with no connections.
         let db = Some(MockPool::new(0));
-        let scraper =
-            InnerComicScraper::new(db, mock_server.uri(), format!("{}/cdx", mock_server.uri()));
+        let scraper = InnerComicScraper::new(
+            db,
+            mock_server.uri(),
+            format!("{}/cdx/{{}}", mock_server.uri()),
+        );
 
+        let timestamp_str = if let Some(timestamp) = timestamp {
+            timestamp
+        } else {
+            ARC_TIMESTAMP_FALLBACK
+        };
+        let expected = format!(
+            "{}/{SRC_COMIC_PREFIX}{}",
+            mock_server.uri().replace("{}", timestamp_str),
+            date.format(SRC_DATE_FMT)
+        );
+
+        let response = if let Some(timestamp) = timestamp {
+            ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(timestamp)
+        } else {
+            ResponseTemplate::new(StatusCode::TOO_MANY_REQUESTS.as_u16())
+        };
+
+        // Set up the mock server to return the CDX API response for the given date.
+        let date_str = date.format(SRC_DATE_FMT).to_string();
+        Mock::given(method(Method::GET.as_str()))
+            .and(path(format!(
+                "/cdx/{SRC_BASE_URL}{SRC_COMIC_PREFIX}{date_str}"
+            )))
+            .respond_with(response)
+            .mount(&mock_server)
+            .await;
+
+        // The scraping should fail if and only if the server redirects.
+        match scraper.get_archive_link(&date).await {
+            Ok(result) => {
+                assert_eq!(
+                    result, expected,
+                    "Retrieved the wrong timestamp from the CDX API"
+                );
+            }
+            Err(err) => {
+                panic!("Failed to scrape comic data: {err}")
+            }
+        };
+    }
+
+    #[test_case((2000, 1, 1), false, None, ("", "https://web.archive.org/web/20150226185430im_/http://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
+    #[test_case((2020, 1, 1), false, None, ("Rfp Process", "//web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
+    #[test_case((2020, 1, 1), false, Some("20200101"), ("Rfp Process", "//web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "permalink redirection")]
+    #[test_case((2000, 1, 1), true, None, ("", "", 0, 0); "missing")]
+    #[actix_web::test]
+    /// Test comic scraping.
+    ///
+    /// # Arguments
+    /// * `date_ymd` - A tuple containing the year, month and day for the comic
+    /// * `missing` - Whether the comic is to be indicated as missing
+    /// * `timestamp` - The Wayback Machine timestamp for the final comic (set to None to
+    ///                 ignore redirection)
+    /// * `comic_data` - The tuple for the comic data containing the title, image URL, image width
+    ///                  and image height
+    async fn test_comic_scraping(
+        date_ymd: (i32, u32, u32),
+        missing: bool,
+        timestamp: Option<&str>,
+        comic_data: (&str, &str, i32, i32),
+    ) {
+        let mock_server = MockServer::start().await;
+        let date = NaiveDate::from_ymd_opt(date_ymd.0, date_ymd.1, date_ymd.2)
+            .expect("Invalid test parameters");
+        let cdx_timestamp = "2000";
+        let final_timestamp = if let Some(timestamp) = timestamp {
+            timestamp
+        } else {
+            cdx_timestamp
+        };
+
+        // The DB shouldn't be used, so use a pool with no connections.
+        let db = Some(MockPool::new(0));
+        let mock_server_uri = mock_server.uri();
+        let scraper = InnerComicScraper::new(
+            db,
+            format!("{mock_server_uri}/{{}}"),
+            format!("{mock_server_uri}/cdx"),
+        );
+
+        let permalink = format!(
+            "{mock_server_uri}/{final_timestamp}/{SRC_COMIC_PREFIX}{}",
+            date.format(SRC_DATE_FMT)
+        );
         let expected = ComicData {
             title: comic_data.0.into(),
             img_url: comic_data.1.into(),
             img_width: comic_data.2,
             img_height: comic_data.3,
-            permalink: format!(
-                "{}/{SRC_COMIC_PREFIX}{}",
-                mock_server.uri(),
-                date.format(SRC_DATE_FMT)
-            ),
+            permalink: permalink.clone(),
         };
 
         let date_str = date.format(SRC_DATE_FMT).to_string();
@@ -462,18 +571,38 @@ mod tests {
             ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html)
         };
 
-        // Set up the mock server to return the pre-fetched "dilbert.com" response for the given date.
+        // Set up the mock server to return the pre-fetched "dilbert.com" response for the given
+        // date.
         Mock::given(method(Method::GET.as_str()))
-            .and(path(format!("/{SRC_COMIC_PREFIX}{date_str}")))
+            .and(path(format!(
+                "/{final_timestamp}/{SRC_COMIC_PREFIX}{date_str}"
+            )))
             .respond_with(response)
             .mount(&mock_server)
             .await;
+
+        // Set up the mock server to return the pre-fetched "dilbert.com" response for the given
+        // date.
+        if timestamp.is_some() {
+            Mock::given(method(Method::GET.as_str()))
+                .and(path(format!(
+                    "/{cdx_timestamp}/{SRC_COMIC_PREFIX}{date_str}"
+                )))
+                .respond_with(
+                    ResponseTemplate::new(StatusCode::FOUND.as_u16())
+                        .append_header("Location", permalink.as_str()),
+                )
+                .mount(&mock_server)
+                .await;
+        }
 
         // Set up the mock server to return a bogus timestamp for the base URL, because this is
         // what the CDX URL is.
         Mock::given(method(Method::GET.as_str()))
             .and(path("/cdx"))
-            .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string("2000"))
+            .respond_with(
+                ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(cdx_timestamp),
+            )
             .mount(&mock_server)
             .await;
 
@@ -542,6 +671,17 @@ mod tests {
                 Ok(())
             } else {
                 Err(AppError::Scrape("Manual error".into()))
+            }
+        });
+
+        // Mock timestamp retrieval.
+        mock_scraper.expect_get_archive_link().return_once({
+            move |_| {
+                if scrape_works {
+                    Ok(String::new())
+                } else {
+                    Err(AppError::Scrape("Manual error".into()))
+                }
             }
         });
 
