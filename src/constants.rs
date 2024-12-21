@@ -28,7 +28,7 @@ pub const RESP_TIMEOUT: u64 = 10;
 // Heroku's free tier limit is 20.
 pub const MAX_DB_CONN: usize = 19;
 /// Timeout (in seconds) for a single database operation
-pub const DB_TIMEOUT: u64 = 3;
+pub const DB_TIMEOUT: u64 = 5;
 
 // ==================================================
 // Miscellaneous
