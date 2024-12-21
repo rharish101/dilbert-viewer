@@ -43,14 +43,9 @@ uuid = { version = "1.2.2", features = ["v4"] }
 lto = true
 
 [dev-dependencies]
-actix-web = { version = "4.9.0", features = ["rustls-0_23"] }
 content-security-policy = "0.5.1"
 deadpool = "0.12.1"
 mockall = "0.13.1"
-rcgen = "0.13.2"
 redis-test = { version = "0.6.0", features = ["aio"] }
-rustls = "0.23.20"
-rustls-pki-types = "1.10.1"
-tempfile = "3.4.0"
 test-case = "3.2.1"
 wiremock = "0.6.2"
