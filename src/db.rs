@@ -39,7 +39,12 @@ pub trait SerdeAsyncCommands: AsyncCommands {
         K: Serialize + Send + Sync,
         V: Serialize + Send + Sync,
     {
-        AsyncCommands::set(self, serde_json::to_vec(&key)?, serde_json::to_vec(&value)?).await?;
+        AsyncCommands::set::<_, _, ()>(
+            self,
+            serde_json::to_vec(&key)?,
+            serde_json::to_vec(&value)?,
+        )
+        .await?;
         Ok(())
     }
 }
@@ -48,14 +53,12 @@ pub trait SerdeAsyncCommands: AsyncCommands {
 impl<T> SerdeAsyncCommands for T where T: AsyncCommands {}
 
 /// Convenient trait for possibly-mocked Redis connection pools.
-#[async_trait]
 pub trait RedisPool {
     type ConnType: ConnectionLike + SerdeAsyncCommands;
     async fn get(&self) -> Result<Self::ConnType, PoolError>;
 }
 
 // Implement it for `deadpool-redis`.
-#[async_trait]
 impl RedisPool for Pool {
     type ConnType = Connection;
     async fn get(&self) -> Result<Self::ConnType, PoolError> {
@@ -93,7 +96,6 @@ pub mod mock {
     pub type MockPool = UmPool<MockRedisConnection>;
 
     // Implement it for `redis-test`.
-    #[async_trait]
     impl RedisPool for MockPool {
         type ConnType = MockRedisConnection;
         async fn get(&self) -> Result<Self::ConnType, PoolError> {
@@ -114,7 +116,8 @@ mod tests {
     use actix_web::{rt::spawn, App, HttpServer};
     use portpicker::pick_unused_port;
     use rcgen::generate_simple_self_signed;
-    use rustls::{Certificate, PrivateKey, ServerConfig};
+    use rustls::ServerConfig;
+    use rustls_pki_types::PrivatePkcs8KeyDer;
 
     #[actix_web::test]
     /// Test the database connection pool initialization.
@@ -127,26 +130,23 @@ mod tests {
 
         // Generate self-signed certs for the mock server. Since Heroku also uses self-signed
         // certs, this is fine.
-        let cert = generate_simple_self_signed(vec![host
+        let cert_key = generate_simple_self_signed(vec![host
             .split(':')
             .next()
             .expect("No port specified in mock server URI")
             .to_string()])
         .expect("Couldn't generate TLS certificates");
         let tls_config = ServerConfig::builder()
-            .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(
-                vec![Certificate(
-                    cert.serialize_der().expect("Couldn't generate TLS cert"),
-                )],
-                PrivateKey(cert.serialize_private_key_der()),
+                vec![cert_key.cert.der().to_owned()],
+                PrivatePkcs8KeyDer::from(cert_key.key_pair.serialize_der()).into(),
             )
             .expect("Invalid TLS cert/key");
 
         // Start the mock TLS server on a single thread.
         let tls_server = HttpServer::new(App::new)
-            .bind_rustls_021(host.clone(), tls_config)
+            .bind_rustls_0_23(host.clone(), tls_config)
             .expect("Couldn't bind mock server to host")
             .workers(1);
         let handle = spawn(tls_server.run());
