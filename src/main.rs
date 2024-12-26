@@ -25,7 +25,7 @@ const PORT_VAR: &str = "PORT";
 /// Log level
 const LOG_VAR: &str = "RUST_LOG";
 /// Redis database connection URL
-const REDIS_URL_VAR: &str = "REDIS_TLS_URL";
+const REDIS_URL_VAR: &str = "REDIS_URL";
 
 /// Initialize the logger from the `RUST_LOG` environment variable, with a default.
 fn init_logger() -> WorkerGuard {

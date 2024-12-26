@@ -31,7 +31,7 @@ cargo build --release
 
 Then, set the required environment variables and run the viewer locally with the Heroku CLI:
 ```sh
-REDIS_TLS_URL=$(heroku config:get REDIS_TLS_URL -a app-name) heroku local web
+REDIS_URL=$(heroku config:get REDIS_URL -a app-name) heroku local web
 ```
 Here, `app-name` is the name of your Heroku app that has a Redis database configured.
 You can also replace the value of this environment variable with a URL to your custom Redis database.
