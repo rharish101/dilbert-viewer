@@ -120,6 +120,7 @@ mod inner {
             };
 
             let permalink = format!("{}/{path}", self.base_url.replace("{}", timestamp));
+            debug!("CDX API timestamp: {timestamp}, permalink: {permalink}");
             let mut resp = self.http_client.get(&permalink).send().await?;
             let status = resp.status();
 
