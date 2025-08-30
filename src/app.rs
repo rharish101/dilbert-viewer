@@ -207,7 +207,7 @@ fn serve_404_raw(date: Option<&NaiveDate>) -> AppResult<HttpResponse> {
 ///
 /// # Arguments
 /// * `date` - The date of the requested comic, if available. This must be a valid date for
-///            which a comic doesn't exist.
+///   which a comic doesn't exist.
 pub fn serve_404(date: Option<&NaiveDate>) -> HttpResponse {
     match serve_404_raw(date) {
         Ok(response) => response,
