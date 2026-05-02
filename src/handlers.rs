@@ -10,7 +10,7 @@ use std::path::Path;
 use actix_web::{get, http::header::LOCATION, web, HttpResponse, Responder};
 use chrono::{Duration, NaiveDate};
 use deadpool_redis::Pool;
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use tracing::info;
 
 use crate::app::{serve_404, serve_css, serve_js, Viewer};
@@ -52,9 +52,9 @@ async fn random_comic() -> impl Responder {
     let last = str_to_date(LAST_COMIC, SRC_DATE_FMT)
         .expect("Variable LAST_COMIC not in format of variable SRC_DATE_FMT");
 
-    let mut rng = thread_rng();
+    let mut rng = rng();
     // Offset (in days) from the first date
-    let rand_offset = rng.gen_range(0..(last - first).num_days());
+    let rand_offset = rng.random_range(0..(last - first).num_days());
     let rand_date = first + Duration::days(rand_offset);
     info!("Chose random comic date: {rand_date}");
 
