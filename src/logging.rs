@@ -1,10 +1,7 @@
+// SPDX-FileCopyrightText: 2020 Luca Palmieri <contact@lpalmieri.com>
 // SPDX-FileCopyrightText: 2022 Harish Rajagopal <harish.rajagopals@gmail.com>
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
-
-// SPDX-FileCopyrightText: 2020 Luca Palmieri <contact@lpalmieri.com>
-//
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later AND MIT
 
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
