@@ -10,7 +10,7 @@ use std::path::Path;
 use actix_web::{get, http::header::LOCATION, web, HttpResponse, Responder};
 use chrono::{Duration, NaiveDate};
 use deadpool_redis::Pool;
-use rand::{rng, Rng};
+use rand::{rng, RngExt};
 use tracing::info;
 
 use crate::app::{serve_404, serve_css, serve_js, Viewer};

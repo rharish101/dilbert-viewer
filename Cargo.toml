@@ -15,20 +15,21 @@ license = "AGPL-3.0-or-later"
 [dependencies]
 actix-files = "0.6.10"
 actix-web = "4.9.0"
-askama = "0.12.0"
+askama = "0.16.0"
 async-trait = "0.1.52"
-awc = { version = "3.4.0", features = ["rustls-0_21"] }
+awc = { version = "3.8.2", features = ["rustls-0_23-native-roots"] }
 chrono = { version = "0.4.19", features = ["serde", "std"], default-features = false }
-deadpool-redis = "0.18.0"
+deadpool-redis = "0.23.0"
 futures = "0.3.19"
 html-escape = "0.2.9"
 minifier = "0.3.2"
-minify-html = { version = "0.15.0", package = "minify-html-onepass" }
+minify-html = { version = "0.18.1", package = "minify-html-onepass" }
 mockall_double = "0.3.0"
 pin-project = "1.0.12"
 portpicker = "0.1.1"
-rand = "0.9.3"
-redis = { version = "0.27.6", features = ["json", "tls-rustls-insecure", "tokio-rustls-comp"] }
+rand = "0.10.1"
+redis = { version = "1.2.0", features = ["json", "tls-rustls-insecure", "tokio-rustls-comp"] }
+rustls = { version = "0.23.40", features = ["aws_lc_rs"] }
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.89"
 thiserror = "2.0.9"
@@ -43,9 +44,9 @@ uuid = { version = "1.2.2", features = ["v4"] }
 lto = true
 
 [dev-dependencies]
-content-security-policy = "0.5.1"
-deadpool = "0.12.1"
-mockall = "0.13.1"
-redis-test = { version = "0.6.0", features = ["aio"] }
+content-security-policy = "0.8.0"
+deadpool = "0.13.0"
+mockall = "0.14.0"
+redis-test = { version = "1.0.3", features = ["aio"] }
 test-case = "3.2.1"
 wiremock = "0.6.2"
