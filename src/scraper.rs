@@ -4,14 +4,14 @@
 
 //! Scraper to get info for requested Dilbert comics
 
-use awc::{http::StatusCode, Client};
+use awc::{Client, http::StatusCode};
 use chrono::NaiveDate;
 use html_escape::decode_html_entities;
 #[cfg(test)]
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tl::{parse as parse_html, Bytes, Node, ParserOptions};
+use tl::{Bytes, Node, ParserOptions, parse as parse_html};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::constants::{RESP_TIMEOUT, SRC_BASE_URL, SRC_COMIC_PREFIX, SRC_DATE_FMT};
@@ -303,8 +303,8 @@ mod tests {
     use redis_test::{IntoRedisValue, MockCmd, MockRedisConnection};
     use test_case::test_case;
     use wiremock::{
-        matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
     };
 
     use crate::db::mock::MockPool;

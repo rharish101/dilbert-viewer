@@ -5,7 +5,7 @@
 [package]
 name = "dilbert-viewer"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 description = "Simple viewer webpage for Dilbert by Scott Adams"
 readme = "README.md"
 repository = "https://github.com/rharish101/dilbert-viewer"
@@ -13,7 +13,7 @@ license = "AGPL-3.0-or-later"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-files = "0.6.10"
+actix-files = "0.7.0"
 actix-web = "4.9.0"
 askama = "0.16.0"
 async-trait = "0.1.52"
@@ -22,7 +22,7 @@ chrono = { version = "0.4.19", features = ["serde", "std"], default-features = f
 deadpool-redis = "0.23.0"
 futures = "0.3.19"
 html-escape = "0.2.9"
-minifier = "0.3.2"
+minifier = "0.4.0"
 minify-html = { version = "0.18.1", package = "minify-html-onepass" }
 mockall_double = "0.3.0"
 pin-project = "1.0.12"
@@ -46,7 +46,7 @@ lto = true
 [dev-dependencies]
 content-security-policy = "0.8.0"
 deadpool = "0.13.0"
-mockall = "0.14.0"
+mockall = "0.15.0"
 redis-test = { version = "1.0.3", features = ["aio"] }
 test-case = "3.2.1"
 wiremock = "0.6.2"

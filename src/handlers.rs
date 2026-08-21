@@ -7,13 +7,13 @@
 //! This is kept separate from `lib.rs`, since actix-web handlers are pub by default.
 use std::path::Path;
 
-use actix_web::{get, http::header::LOCATION, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, get, http::header::LOCATION, web};
 use chrono::{Duration, NaiveDate};
 use deadpool_redis::Pool;
-use rand::{rng, RngExt};
+use rand::{RngExt, rng};
 use tracing::info;
 
-use crate::app::{serve_404, serve_css, serve_js, Viewer};
+use crate::app::{Viewer, serve_404, serve_css, serve_js};
 use crate::constants::{FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT, STATIC_DIR};
 use crate::datetime::str_to_date;
 

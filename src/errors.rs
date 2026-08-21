@@ -42,6 +42,9 @@ pub enum MinificationError {
     /// Error minifying CSS
     #[error("Error minifying CSS: {0}")]
     Css(String),
+    /// Error minifying JS
+    #[error("Error minifying JS: {0}")]
+    Js(String),
 }
 
 impl From<MinifyHtmlError> for MinificationError {

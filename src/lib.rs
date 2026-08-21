@@ -17,14 +17,15 @@ mod templates;
 
 use actix_files::Files;
 use actix_web::{
+    App, Error as WebError, HttpServer,
     body::MessageBody,
     dev::{ServiceRequest, ServiceResponse},
     middleware::{Compress, DefaultHeaders, Logger},
-    web, App, Error as WebError, HttpServer,
+    web,
 };
 use tracing::{error, info};
 
-use crate::app::{serve_404, Viewer};
+use crate::app::{Viewer, serve_404};
 use crate::constants::{ARC_BASE_URL, CDX_URL, CSP, STATIC_DIR, STATIC_URL};
 use crate::db::get_db_pool;
 use crate::handlers::{comic_page, last_comic, minify_css, minify_js, random_comic};

@@ -39,8 +39,7 @@ pub const SRC_BASE_URL: &str = "https://dilbert.com/";
 pub const ARC_BASE_URL: &str = "https://web.archive.org/web/{}/https://dilbert.com";
 /// URL for archive.org CDX API
 // Docs: https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server
-pub const CDX_URL: &str =
-    "https://web.archive.org/cdx/search/cdx?url={}&fl=timestamp&filter=statuscode:^2&limit=-1&to=20230312";
+pub const CDX_URL: &str = "https://web.archive.org/cdx/search/cdx?url={}&fl=timestamp&filter=statuscode:^2&limit=-1&to=20230312";
 /// URL path prefix for each comic on "dilbert.com"
 pub const SRC_COMIC_PREFIX: &str = "strip/";
 /// Link to the public version of this app

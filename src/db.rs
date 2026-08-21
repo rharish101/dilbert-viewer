@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use deadpool_redis::{Config as RedisConfig, Connection, Pool, PoolError, Runtime};
-use redis::{aio::ConnectionLike, AsyncCommands, RedisResult};
-use serde::{de::DeserializeOwned, Serialize};
+use redis::{AsyncCommands, RedisResult, aio::ConnectionLike};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::constants::{DB_TIMEOUT, MAX_DB_CONN};
 use crate::errors::DbInitError;

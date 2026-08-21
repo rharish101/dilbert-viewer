@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Datetime utilities for the viewer app
-use chrono::{format::ParseResult, NaiveDate};
+use chrono::{NaiveDate, format::ParseResult};
 
 /// Convert the date string (assumed in UTC) to a `chrono::NaiveDate` struct.
 ///

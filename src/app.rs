@@ -6,7 +6,7 @@
 use std::cmp::{max, min};
 use std::path::Path;
 
-use actix_web::{http::header::ContentType, HttpResponse};
+use actix_web::{HttpResponse, http::header::ContentType};
 use askama::Template;
 use chrono::{Duration, NaiveDate};
 use tracing::{debug, error};
@@ -161,7 +161,10 @@ pub async fn serve_css(path: &Path) -> HttpResponse {
 async fn serve_js_raw(path: &Path) -> AppResult<HttpResponse> {
     let js = load_file(path).await?;
 
-    let minified = minifier::js::minify(&js).to_string();
+    let minified = match minifier::js::minify(&js) {
+        Ok(minified) => minified.to_string(),
+        Err(err) => return Err(MinificationError::Js(err.into()).into()),
+    };
     debug!(
         "Minified \"{}\" from {} bytes to {}",
         path.display(),
@@ -258,8 +261,8 @@ mod tests {
     use actix_web::{
         body::MessageBody,
         http::{
-            header::{TryIntoHeaderValue, CONTENT_TYPE},
             StatusCode,
+            header::{CONTENT_TYPE, TryIntoHeaderValue},
         },
     };
     use test_case::test_case;
@@ -281,7 +284,7 @@ mod tests {
     fn test_minified_html_is_parsable(file_stem: &str) {
         let path = format!("{HTML_TEST_CASE_PATH}/{file_stem}.html");
         let html =
-            read_to_string(&path).unwrap_or_else(|_| panic!("Couldn't read test case {}", &path));
+            read_to_string(&path).unwrap_or_else(|_| panic!("Couldn't read test case {}", path));
 
         let result = minify_html(html).expect("Error minifying HTML");
         // Only checks if the minified HTML is actually parsable.

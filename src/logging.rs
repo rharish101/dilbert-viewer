@@ -3,18 +3,18 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later AND MIT
 
-use std::future::{ready, Future, Ready};
+use std::future::{Future, Ready, ready};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use actix_web::{
-    body::{BodySize, MessageBody},
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    web::Bytes,
     Error,
+    body::{BodySize, MessageBody},
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
+    web::Bytes,
 };
 use pin_project::{pin_project, pinned_drop};
-use tracing::{info_span, Span};
+use tracing::{Span, info_span};
 use uuid::Uuid;
 
 #[derive(Default)]

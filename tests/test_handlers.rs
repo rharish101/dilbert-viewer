@@ -6,19 +6,19 @@ use std::time::Duration;
 
 use actix_web::rt::spawn;
 use awc::{
-    http::{
-        header::{CONTENT_TYPE, LOCATION},
-        Method, StatusCode,
-    },
     Client, ClientResponse,
+    http::{
+        Method, StatusCode,
+        header::{CONTENT_TYPE, LOCATION},
+    },
 };
 use chrono::NaiveDate;
 use dilbert_viewer::run;
 use portpicker::pick_unused_port;
 use test_case::test_case;
 use wiremock::{
-    matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
 };
 
 /// Hostname where to start the server
