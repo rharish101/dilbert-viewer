@@ -44,7 +44,7 @@ pub const CDX_URL: &str = "https://web.archive.org/cdx/search/cdx?url={}&fl=time
 pub const SRC_COMIC_PREFIX: &str = "strip/";
 /// Link to the public version of this app
 // Used in the OpenGraph tags
-pub const APP_URL: &str = "https://dilbert-viewer.herokuapp.com/";
+pub const APP_URL: &str = "https://dilbert-viewer.rharish.dev/";
 /// Link to the public version of this repo
 // Mainly for publicity :P
 pub const REPO_URL: &str = "https://github.com/rharish101/dilbert-viewer";

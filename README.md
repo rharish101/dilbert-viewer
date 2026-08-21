@@ -6,9 +6,9 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Dilbert Viewer
 [![Tests](https://img.shields.io/github/actions/workflow/status/rharish101/dilbert-viewer/tests.yml?branch=main&label=Tests&logo=github&style=flat-square)](https://github.com/rharish101/dilbert-viewer/actions/workflows/tests.yml)
-[![Deployment](https://img.shields.io/github/deployments/rharish101/dilbert-viewer/dilbert-viewer?label=Deployment&logo=heroku&style=flat-square)](https://dilbert-viewer.herokuapp.com)
+[![Deployment](https://img.shields.io/github/deployments/rharish101/dilbert-viewer/dilbert-viewer?label=Deployment&logo=heroku&style=flat-square)](https://dilbert-viewer.rharish.dev)
 
-A simple comic viewer for Dilbert by Scott Adams, hosted on Heroku [here](https://dilbert-viewer.herokuapp.com).
+A simple comic viewer for Dilbert by Scott Adams, hosted on Heroku [here](https://dilbert-viewer.rharish.dev).
 It uses the third-party [Rust Buildpack](https://elements.heroku.com/buildpacks/emk/heroku-buildpack-rust) with the [Heroku Redis add-on](https://elements.heroku.com/addons/heroku-redis) for caching.
 
 ## Setup
