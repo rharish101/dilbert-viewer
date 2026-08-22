@@ -8,8 +8,7 @@
 use std::path::Path;
 
 use actix_web::{HttpResponse, Responder, get, http::header::LOCATION, web};
-use chrono::{Duration, NaiveDate};
-use deadpool_redis::Pool;
+use chrono::{NaiveDate, TimeDelta};
 use rand::{RngExt, rng};
 use tracing::info;
 
@@ -19,7 +18,7 @@ use crate::datetime::str_to_date;
 
 /// Serve the last comic.
 #[get("/")]
-async fn last_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
+async fn last_comic(viewer: web::Data<Viewer>) -> impl Responder {
     // If there is no comic for this date yet, "dilbert.com" will redirect to the homepage. The
     // code can handle this by instead showing the contents of the last comic.
     let last = str_to_date(LAST_COMIC, SRC_DATE_FMT)
@@ -29,10 +28,7 @@ async fn last_comic(viewer: web::Data<Viewer<Pool>>) -> impl Responder {
 
 /// Serve the comic requested in the given URL.
 #[get("/{year}-{month}-{day}")]
-async fn comic_page(
-    viewer: web::Data<Viewer<Pool>>,
-    path: web::Path<(i32, u32, u32)>,
-) -> impl Responder {
+async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(i32, u32, u32)>) -> impl Responder {
     let (year, month, day) = path.into_inner();
 
     // Check to see if the date is invalid.
@@ -55,7 +51,7 @@ async fn random_comic() -> impl Responder {
     let mut rng = rng();
     // Offset (in days) from the first date
     let rand_offset = rng.random_range(0..(last - first).num_days());
-    let rand_date = first + Duration::days(rand_offset);
+    let rand_date = first + TimeDelta::days(rand_offset);
     info!("Chose random comic date: {rand_date}");
 
     let location = format!("/{}", rand_date.format(SRC_DATE_FMT));

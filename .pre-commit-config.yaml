@@ -10,10 +10,10 @@ repos:
     - id: clippy
       args: [--tests, --, -D, warnings]
   - repo: https://github.com/DevinR528/cargo-sort
-    rev: v1.1.0
+    rev: v2.1.4
     hooks:
     - id: cargo-sort
   - repo: https://github.com/fsfe/reuse-tool
-    rev: v5.0.2
+    rev: v6.2.0
     hooks:
       - id: reuse

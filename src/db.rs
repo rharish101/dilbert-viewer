@@ -5,106 +5,223 @@
 //! Utilities for working with the database
 use std::time::Duration;
 
-use async_trait::async_trait;
-use deadpool_redis::{Config as RedisConfig, Connection, Pool, PoolError, Runtime};
-use redis::{AsyncCommands, RedisResult, aio::ConnectionLike};
-use serde::{Serialize, de::DeserializeOwned};
+use chrono::NaiveDate;
+use sea_orm::DbErr;
+use sea_orm::{
+    ConnectOptions, Database, DatabaseConnection, EntityTrait, Set, sea_query::OnConflict,
+};
 
-use crate::constants::{DB_TIMEOUT, MAX_DB_CONN};
-use crate::errors::DbInitError;
+#[cfg(test)]
+use sea_orm::{ConnectionTrait, DbBackend, Statement};
+use tracing::{debug, info};
 
-/// Trait to get and set Redis key-values with automatic serde (de)serialization using JSON.
-// `redis::RedisFuture` is basically a future returned by `async_trait`, so using the latter is
-// basically free convenience.
-#[async_trait]
-pub trait SerdeAsyncCommands: AsyncCommands {
-    /// Get a possibly-null value given a key.
-    ///
-    /// The null value indicates a missing key in the DB.
-    async fn get<K, RV: DeserializeOwned>(&mut self, key: K) -> RedisResult<Option<RV>>
-    where
-        K: Serialize + Send + Sync,
-    {
-        let data: Option<Vec<u8>> = AsyncCommands::get(self, serde_json::to_vec(&key)?).await?;
-        Ok(if let Some(data) = data {
-            Some(serde_json::from_slice(data.as_slice())?)
-        } else {
-            None
-        })
-    }
+use crate::constants::{DB_TIMEOUT, ENTITY_PREFIX, MAX_DB_CONN};
+use crate::entities::comic;
+use crate::scraper::ComicData;
 
-    /// Set a value for a given key.
-    async fn set<K, V>(&mut self, key: K, value: V) -> RedisResult<()>
-    where
-        K: Serialize + Send + Sync,
-        V: Serialize + Send + Sync,
-    {
-        AsyncCommands::set::<_, _, ()>(
-            self,
-            serde_json::to_vec(&key)?,
-            serde_json::to_vec(&value)?,
-        )
-        .await?;
-        Ok(())
-    }
-}
-
-// Auto-implement it where possible.
-impl<T> SerdeAsyncCommands for T where T: AsyncCommands {}
-
-/// Convenient trait for possibly-mocked Redis connection pools.
-pub trait RedisPool {
-    type ConnType: ConnectionLike + SerdeAsyncCommands;
-    async fn get(&self) -> Result<Self::ConnType, PoolError>;
-}
-
-// Implement it for `deadpool-redis`.
-impl RedisPool for Pool {
-    type ConnType = Connection;
-    async fn get(&self) -> Result<Self::ConnType, PoolError> {
-        self.get().await
-    }
-}
-
-/// Initialize the database connection pool for caching data.
+/// Initialize a database connection pool from a URL.
 ///
 /// # Arguments
-/// * `url` - The URL used to connect to the database
-pub fn get_db_pool(url: String) -> Result<deadpool_redis::Pool, DbInitError> {
-    // Heroku needs SSL for its Redis addon, but uses a self-signed certificate. So simply disable
-    // verification while keeping SSL.
-    let config = RedisConfig::from_url(url + "#insecure");
-    let pool_builder = config
-        .builder()?
-        .runtime(Runtime::Tokio1)
-        .max_size(MAX_DB_CONN)
-        .wait_timeout(Some(Duration::from_secs(DB_TIMEOUT)));
-    Ok(pool_builder.build()?)
+/// * `url` - The URL used to connect to the database, e.g. `postgres://...` or
+///   `sqlite::memory:` (the latter is used in tests)
+pub(crate) async fn init_db(url: &str) -> Result<DatabaseConnection, DbErr> {
+    let mut options = ConnectOptions::new(url);
+    options
+        .max_connections(MAX_DB_CONN)
+        .min_connections(1)
+        .acquire_timeout(Duration::from_secs(DB_TIMEOUT));
+    Database::connect(options).await
+}
+
+/// Ensure the comics table exists, syncing the schema from the entity
+/// definitions.
+///
+/// To be run at the start of each subcommand. SeaORM introspects the live
+/// database and creates any missing tables/columns for the entities under
+/// `ENTITY_PREFIX`.
+pub(crate) async fn ensure_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
+    db.get_schema_registry(ENTITY_PREFIX).sync(db).await?;
+    Ok(())
+}
+
+/// Get the comic data for a given date.
+///
+/// `None` is returned if there's no comic for that date, or if it hasn't been
+/// scraped yet.
+pub(crate) async fn get_comic(
+    db: &DatabaseConnection,
+    date: NaiveDate,
+) -> Result<Option<ComicData>, DbErr> {
+    let comic_data = comic::Entity::find_by_id(date)
+        .one(db)
+        .await?
+        .map(ComicData::from);
+    if comic_data.is_some() {
+        debug!("Retrieved data from DB: {comic_data:?}");
+    } else {
+        debug!("Missing data in DB for date: {date}")
+    }
+    Ok(comic_data)
+}
+
+/// Insert a comic for a given date, skipping if one already exists.
+///
+/// # Arguments
+/// * `db` - The database connection
+/// * `date` - The date of the comic being inserted
+/// * `comic_data` - The comic data
+/// * `overwrite` - Whether to overwrite data if a comic already exists
+pub(crate) async fn insert_comic(
+    db: &DatabaseConnection,
+    date: NaiveDate,
+    comic_data: ComicData,
+    overwrite: bool,
+) -> Result<(), DbErr> {
+    debug!("Attempting to update database with: {comic_data:?}, overwrite: {overwrite}");
+    let model = comic::ActiveModel::from((date, comic_data));
+    let mut on_conflict = OnConflict::column(comic::COLUMN.date);
+    if overwrite {
+        on_conflict
+            .update_columns([comic::COLUMN.title])
+            .update_columns([comic::COLUMN.img_url])
+            .update_columns([comic::COLUMN.img_width])
+            .update_columns([comic::COLUMN.img_height])
+            .update_columns([comic::COLUMN.permalink]);
+    } else {
+        on_conflict.do_nothing();
+    }
+    comic::Entity::insert(model)
+        .on_conflict(on_conflict)
+        .try_insert()
+        .exec(db)
+        .await?;
+    info!("Successfully stored data for {date} in database");
+    Ok(())
+}
+
+/// Convert an entity into scraper comic data.
+impl From<comic::Model> for ComicData {
+    fn from(model: comic::Model) -> Self {
+        Self {
+            title: model.title,
+            img_url: model.img_url,
+            img_width: model.img_width,
+            img_height: model.img_height,
+            permalink: model.permalink,
+        }
+    }
+}
+
+/// Convert a date and comic data into an entity.
+impl From<(NaiveDate, ComicData)> for comic::ActiveModel {
+    fn from((date, data): (NaiveDate, ComicData)) -> Self {
+        Self {
+            date: Set(date),
+            title: Set(data.title),
+            img_url: Set(data.img_url),
+            img_width: Set(data.img_width),
+            img_height: Set(data.img_height),
+            permalink: Set(data.permalink),
+        }
+    }
 }
 
 #[cfg(test)]
-pub mod mock {
+pub(super) mod tests {
     use super::*;
+    use test_case::test_case;
 
-    use deadpool::{
-        managed::TimeoutType,
-        unmanaged::{Object, Pool as UmPool, PoolError as UmPoolError},
-    };
-    use redis_test::MockRedisConnection;
+    /// A test date (a weekday, so a real comic exists on this date).
+    fn test_date() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2000, 1, 15).unwrap()
+    }
 
-    /// A pool for a mock Redis connection.
-    pub type MockPool = UmPool<MockRedisConnection>;
-
-    // Implement it for `redis-test`.
-    impl RedisPool for MockPool {
-        type ConnType = MockRedisConnection;
-        async fn get(&self) -> Result<Self::ConnType, PoolError> {
-            match self.get().await {
-                Ok(conn) => Ok(Object::take(conn)),
-                Err(UmPoolError::Timeout) => Err(PoolError::Timeout(TimeoutType::Wait)),
-                Err(UmPoolError::Closed) => Err(PoolError::Closed),
-                Err(UmPoolError::NoRuntimeSpecified) => Err(PoolError::NoRuntimeSpecified),
-            }
+    /// Test comic data with the given title.
+    fn test_comic_data(title: &str) -> ComicData {
+        ComicData {
+            title: String::from(title),
+            img_url: "https://example.com/comic.png".into(),
+            img_width: 580,
+            img_height: 140,
+            permalink: "https://dilbert.com/strip/2000-01-15".into(),
         }
+    }
+
+    /// An in-memory SQLite database with the comics schema.
+    pub async fn test_db() -> DatabaseConnection {
+        let mut options = ConnectOptions::new("sqlite::memory:");
+        // `max_connections(1)` is required: each connection in the pool to `sqlite::memory:` is a
+        // *separate* in-memory database, so more than one connection would see different (empty)
+        // tables.
+        options.max_connections(1);
+        let db = Database::connect(options).await.unwrap();
+        ensure_schema(&db).await.unwrap();
+        db
+    }
+
+    #[actix_web::test]
+    /// Test that `ensure_schema` creates the comics table.
+    async fn test_ensure_schema_creates_table() {
+        let db = test_db().await;
+        let row = db
+            .query_one_raw(Statement::from_string(
+                DbBackend::Sqlite,
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'comics'",
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        let ddl: String = row.try_get("", "sql").unwrap();
+        for column in [
+            "date",
+            "title",
+            "img_url",
+            "img_width",
+            "img_height",
+            "permalink",
+        ] {
+            assert!(ddl.contains(column), "Missing column {column} in: {ddl}");
+        }
+    }
+
+    #[test_case(false; "missing comic")]
+    #[test_case(true; "existing comic")]
+    #[actix_web::test]
+    /// Test that `get_comic` returns the stored comic, or `None` when missing.
+    async fn test_get_comic(comic_exists: bool) {
+        let db = test_db().await;
+        let date = test_date();
+        let expected = if comic_exists {
+            let data = test_comic_data("A test comic");
+            insert_comic(&db, date, data.clone(), false).await.unwrap();
+            Some(data)
+        } else {
+            None
+        };
+        assert_eq!(get_comic(&db, date).await.unwrap(), expected);
+    }
+
+    #[test_case(None, false, "Updated"; "insert new")]
+    #[test_case(None, true, "Updated"; "insert new with overwrite")]
+    #[test_case(Some("Original"), false, "Original"; "skip existing")]
+    #[test_case(Some("Original"), true, "Updated"; "overwrite existing")]
+    #[actix_web::test]
+    /// Test `insert_comic`, checking all fields are preserved and that
+    /// overwriting (or not) existing entries works as expected.
+    async fn test_insert_comic(existing: Option<&str>, overwrite: bool, expected_title: &str) {
+        let db = test_db().await;
+        let date = test_date();
+        if let Some(title) = existing {
+            insert_comic(&db, date, test_comic_data(title), false)
+                .await
+                .unwrap();
+        }
+        insert_comic(&db, date, test_comic_data("Updated"), overwrite)
+            .await
+            .unwrap();
+        assert_eq!(
+            get_comic(&db, date).await.unwrap(),
+            Some(test_comic_data(expected_title))
+        );
     }
 }

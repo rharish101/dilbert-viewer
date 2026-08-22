@@ -8,36 +8,35 @@ use std::path::Path;
 
 use actix_web::{HttpResponse, http::header::ContentType};
 use askama::Template;
-use chrono::{Duration, NaiveDate};
+use chrono::{NaiveDate, TimeDelta};
+use sea_orm::DatabaseConnection;
 use tracing::{debug, error};
 
 use crate::constants::{APP_URL, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, REPO_URL, SRC_DATE_FMT};
 use crate::datetime::str_to_date;
-use crate::db::RedisPool;
-use crate::errors::{AppError, AppResult, MinificationError};
+use crate::db::get_comic;
+use crate::errors::{MinificationError, ViewerError, ViewerResult};
 use crate::scraper::ComicData;
-#[mockall_double::double]
-use crate::scraper::ComicScraper;
 use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 
-pub struct Viewer<T: RedisPool + 'static> {
-    /// The scraper for comics given date
-    comic_scraper: ComicScraper<T>,
+pub struct Viewer {
+    /// The database connection.
+    db: DatabaseConnection,
 }
 
-impl<T: RedisPool + Clone + 'static> Viewer<T> {
+impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db: Option<T>, base_url: String, cdx_url: String) -> Self {
-        let comic_scraper = ComicScraper::new(db, base_url, cdx_url);
-        Self { comic_scraper }
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
     }
 
     /// Get the info about the requested comic.
-    async fn get_comic_info(&self, date: &NaiveDate) -> AppResult<ComicData> {
-        if let Some(comic_data) = self.comic_scraper.get_comic_data(date).await? {
+    async fn get_comic_info(&self, date: &NaiveDate) -> ViewerResult<ComicData> {
+        if let Some(comic_data) = get_comic(&self.db, *date).await? {
+            debug!("Retrieved data from DB: {comic_data:?}");
             Ok(comic_data)
         } else {
-            Err(AppError::NotFound(format!("No comic found for {date}")))
+            Err(ViewerError::NotFound(format!("No comic found for {date}")))
         }
     }
 
@@ -54,13 +53,13 @@ impl<T: RedisPool + Clone + 'static> Viewer<T> {
             .and_then(|info| serve_template(date, &info))
         {
             Ok(response) => response,
-            Err(AppError::NotFound(..)) => serve_404(Some(date)),
+            Err(ViewerError::NotFound(..)) => serve_404(Some(date)),
             Err(err) => serve_500(&err),
         }
     }
 }
 
-fn minify_html(mut html: String) -> AppResult<String> {
+fn minify_html(mut html: String) -> ViewerResult<String> {
     let old_len = html.len();
     let result = minify_html::in_place_str(html.as_mut_str(), &minify_html::Cfg::new());
 
@@ -82,15 +81,15 @@ fn minify_html(mut html: String) -> AppResult<String> {
 /// # Arguments
 /// * `date` - The date of the comic
 /// * `comic_data` - The scraped comic data
-fn serve_template(date: &NaiveDate, comic_data: &ComicData) -> AppResult<HttpResponse> {
+fn serve_template(date: &NaiveDate, comic_data: &ComicData) -> ViewerResult<HttpResponse> {
     let first_comic = str_to_date(FIRST_COMIC, SRC_DATE_FMT)?;
     let last_comic = str_to_date(LAST_COMIC, SRC_DATE_FMT)?;
 
     // Links to previous and next comics
-    let previous_comic = &max(first_comic, *date - Duration::days(1))
+    let previous_comic = &max(first_comic, *date - TimeDelta::days(1))
         .format(SRC_DATE_FMT)
         .to_string();
-    let next_comic = &min(last_comic, *date + Duration::days(1))
+    let next_comic = &min(last_comic, *date + TimeDelta::days(1))
         .format(SRC_DATE_FMT)
         .to_string();
 
@@ -115,16 +114,16 @@ fn serve_template(date: &NaiveDate, comic_data: &ComicData) -> AppResult<HttpRes
 }
 
 /// Load a file from disk
-async fn load_file(path: &Path) -> AppResult<String> {
+async fn load_file(path: &Path) -> ViewerResult<String> {
     let file = match tokio::fs::read(path).await {
         Ok(text) => text,
-        Err(err) => return Err(AppError::NotFound(err.to_string())),
+        Err(err) => return Err(ViewerError::NotFound(err.to_string())),
     };
     Ok(std::str::from_utf8(&file)?.to_string())
 }
 
 /// Serve the requested CSS file with minification, without handling errors.
-async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
+async fn serve_css_raw(path: &Path) -> ViewerResult<HttpResponse> {
     let css = load_file(path).await?;
 
     let minified = match minifier::css::minify(&css) {
@@ -152,13 +151,13 @@ async fn serve_css_raw(path: &Path) -> AppResult<HttpResponse> {
 pub async fn serve_css(path: &Path) -> HttpResponse {
     match serve_css_raw(path).await {
         Ok(resp) => resp,
-        Err(AppError::NotFound(..)) => serve_404(None),
+        Err(ViewerError::NotFound(..)) => serve_404(None),
         Err(err) => serve_500(&err),
     }
 }
 
 /// Serve the requested JavaScript file with minification, without handling errors.
-async fn serve_js_raw(path: &Path) -> AppResult<HttpResponse> {
+async fn serve_js_raw(path: &Path) -> ViewerResult<HttpResponse> {
     let js = load_file(path).await?;
 
     let minified = match minifier::js::minify(&js) {
@@ -186,13 +185,13 @@ async fn serve_js_raw(path: &Path) -> AppResult<HttpResponse> {
 pub async fn serve_js(path: &Path) -> HttpResponse {
     match serve_js_raw(path).await {
         Ok(resp) => resp,
-        Err(AppError::NotFound(..)) => serve_404(None),
+        Err(ViewerError::NotFound(..)) => serve_404(None),
         Err(err) => serve_500(&err),
     }
 }
 
 /// Serve a 404 not found response for invalid URLs, without handling errors.
-fn serve_404_raw(date: Option<&NaiveDate>) -> AppResult<HttpResponse> {
+fn serve_404_raw(date: Option<&NaiveDate>) -> ViewerResult<HttpResponse> {
     let date_str = date.map(|date| date.format(SRC_DATE_FMT).to_string());
     let template = NotFoundTemplate {
         date: date_str.as_deref(),
@@ -222,7 +221,7 @@ pub fn serve_404(date: Option<&NaiveDate>) -> HttpResponse {
 ///
 /// # Arguments
 /// * `err` - The actual internal server error
-pub fn serve_500(err: &AppError) -> HttpResponse {
+pub fn serve_500(err: &ViewerError) -> HttpResponse {
     let error = &format!("{err}");
     let mut response = HttpResponse::InternalServerError();
 
@@ -266,8 +265,6 @@ mod tests {
         },
     };
     use test_case::test_case;
-
-    use crate::db::mock::MockPool;
 
     /// Path to the directory where test HTML files are stored
     const HTML_TEST_CASE_PATH: &str = "testdata/html";
@@ -366,7 +363,7 @@ mod tests {
     /// # Arguments
     /// * `error_msg` - The error message to be displayed in the page
     fn test_500_page(error_msg: &str) {
-        let resp = serve_500(&AppError::Scrape(error_msg.into()));
+        let resp = serve_500(&ViewerError::NotFound(error_msg.into()));
         assert_eq!(
             resp.status(),
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -388,7 +385,7 @@ mod tests {
         let path = Path::new(path);
         let resp = match serve_css_raw(path).await {
             Ok(resp) => resp,
-            Err(AppError::NotFound(err)) => {
+            Err(ViewerError::NotFound(err)) => {
                 if should_serve {
                     panic!("Error serving CSS that exists: {err}");
                 } else {
@@ -439,16 +436,17 @@ mod tests {
         Fail,
     }
 
-    /// Get a `Viewer` whose scrapers have been mocked, along with the data it works with.
+    /// Get a `Viewer` with a test database set up according to the requested state, along
+    /// with the data it works with.
     ///
     /// # Arguments
-    /// * `state` - The state denoting the behaviour of the viewer's scrapers
+    /// * `state` - The state denoting the behaviour of the viewer's database
     ///
     /// # Returns
     /// * The "mocked" viewer
     /// * The test comic date
     /// * The test comic data
-    fn get_mock_viewer(state: GetComicInfoState) -> (Viewer<MockPool>, NaiveDate, ComicData) {
+    async fn get_mock_viewer(state: GetComicInfoState) -> (Viewer, NaiveDate, ComicData) {
         let comic_date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
         let comic_data = ComicData {
             title: String::new(),
@@ -458,21 +456,24 @@ mod tests {
             permalink: String::new(),
         };
 
-        // Set up the mock comic scraper.
-        let mut mock_comic_scraper = ComicScraper::<MockPool>::default();
-        let expected_comic_data = Some(comic_data.clone());
-        mock_comic_scraper
-            .expect_get_comic_data()
-            .times(1)
-            .returning(move |date| match state {
-                GetComicInfoState::Found if date == &comic_date => Ok(expected_comic_data.clone()),
-                GetComicInfoState::Fail => Err(AppError::Scrape("Manual error".into())),
-                _ => Ok(None),
-            });
-
-        let viewer = Viewer {
-            comic_scraper: mock_comic_scraper,
+        let db = crate::db::tests::test_db().await;
+        match state {
+            // Populate the DB with the test comic.
+            GetComicInfoState::Found => {
+                crate::db::insert_comic(&db, comic_date, comic_data.clone(), false)
+                    .await
+                    .expect("Failed to insert data into the database");
+            }
+            // Ensure the DB can't be queried by closing the connection pool.
+            GetComicInfoState::Fail => db
+                .close_by_ref()
+                .await
+                .expect("Failed to close the database connection"),
+            // Leave the DB empty.
+            GetComicInfoState::MissingComic => {}
         };
+
+        let viewer = Viewer { db };
         (viewer, comic_date, comic_data)
     }
 
@@ -485,12 +486,12 @@ mod tests {
     /// * `state` - The state denoting the behaviour of the viewer's scrapers
     async fn test_get_comic_info(state: GetComicInfoState) {
         let is_missing = state == GetComicInfoState::MissingComic;
-        let (viewer, comic_date, comic_data) = get_mock_viewer(state);
+        let (viewer, comic_date, comic_data) = get_mock_viewer(state).await;
         match viewer.get_comic_info(&comic_date).await {
             Ok(result_data) => {
                 assert_eq!(result_data, comic_data, "Viewer returned wrong comic data");
             }
-            Err(AppError::NotFound(..)) if is_missing => {}
+            Err(ViewerError::NotFound(..)) if is_missing => {}
             Err(err) => panic!("Viewer failed to get info: {err}"),
         };
     }
@@ -510,7 +511,7 @@ mod tests {
             GetComicInfoState::Fail => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        let (viewer, comic_date, _) = get_mock_viewer(state);
+        let (viewer, comic_date, _) = get_mock_viewer(state).await;
         let resp = viewer.serve_comic(&comic_date).await;
         assert_eq!(resp.status(), expected_status);
     }
