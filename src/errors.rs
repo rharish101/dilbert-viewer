@@ -3,36 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Custom error definitions
-use std::env;
-
-use awc::error::{PayloadError, SendRequestError};
-use deadpool_redis::{BuildError, ConfigError, PoolError};
 use minify_html::Error as MinifyHtmlError;
+use reqwest::Error as HttpError;
+use sea_orm::DbErr;
 use thiserror::Error;
-
-#[derive(Error, Debug)]
-/// Errors when initializing the database pool
-pub enum DbInitError {
-    /// Error reading the DB URL from the environment
-    #[error("Missing environment variable for the database URL: {0}")]
-    Env(#[from] env::VarError),
-    /// Invalid Redis URL
-    #[error("Error in the Redis URL: {0}")]
-    Config(#[from] ConfigError),
-    /// Error initializing the DB pool
-    #[error("Error initializing the database pool: {0}")]
-    Build(#[from] BuildError),
-}
-
-#[derive(Error, Debug)]
-pub enum HttpError {
-    /// Error sending a request
-    #[error("Error sending request: {0}")]
-    SendRequest(#[from] SendRequestError),
-    /// Error processing the response payload
-    #[error("Error parsing payload: {0}")]
-    Payload(#[from] PayloadError),
-}
 
 #[derive(Error, Debug)]
 pub enum MinificationError {
@@ -54,26 +28,14 @@ impl From<MinifyHtmlError> for MinificationError {
 }
 
 #[derive(Error, Debug)]
-/// All errors raised by the viewer app
-pub enum AppError {
-    /// Errors when acquiring a connection from the DB pool
-    #[error("Error acquiring DB connection: {0}")]
-    Pool(#[from] PoolError),
+/// All errors raised by the viewer
+pub enum ViewerError {
     /// Errors when executing a DB query
     #[error("Database error: {0}")]
-    Db(#[from] redis::RedisError),
-    /// Errors when serializing/deserializing a DB query argument/result
-    #[error("(De)serialization error: {0}")]
-    Serde(#[from] serde_json::Error),
-    /// Errors when building an HTTP client, or when making HTTP requests
-    #[error("HTTP client error: {0}")]
-    Http(HttpError),
+    Db(#[from] DbErr),
     /// Errors in parsing dates
     #[error("Error parsing date: {0}")]
     DateParse(#[from] chrono::format::ParseError),
-    /// Errors in HTML parsing
-    #[error("HTML parse error: {0}")]
-    HtmlParse(#[from] tl::errors::ParseError),
     /// Errors in building HTML templates
     #[error("Error building HTML template: {0}")]
     Template(#[from] askama::Error),
@@ -83,6 +45,26 @@ pub enum AppError {
     /// Errors in minifying HTML/CSS
     #[error("Minification error: {0}")]
     Minify(#[from] MinificationError),
+    /// Errors when no comic exists for a given date
+    #[error("{0}")]
+    NotFound(String),
+}
+
+/// Convenient alias for results with viewer errors
+pub type ViewerResult<T> = Result<T, ViewerError>;
+
+#[derive(Error, Debug)]
+/// All errors raised by the scraper
+pub enum ScraperError {
+    /// Errors when executing a DB query
+    #[error("Database error: {0}")]
+    Db(#[from] DbErr),
+    /// Errors when making HTTP requests
+    #[error("HTTP client error: {0}")]
+    Http(#[from] HttpError),
+    /// Errors in HTML parsing
+    #[error("HTML parse error: {0}")]
+    HtmlParse(#[from] tl::errors::ParseError),
     /// Errors in scraping info from "dilbert.com"
     #[error("Scraping error: {0}")]
     Scrape(String),
@@ -91,14 +73,5 @@ pub enum AppError {
     NotFound(String),
 }
 
-impl<E> From<E> for AppError
-where
-    E: Into<HttpError>,
-{
-    fn from(err: E) -> Self {
-        Self::Http(err.into())
-    }
-}
-
-/// Convenient alias for results with viewer app errors
-pub type AppResult<T> = Result<T, AppError>;
+/// Convenient alias for results with scraper app errors
+pub type ScraperResult<T> = Result<T, ScraperError>;

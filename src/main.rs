@@ -7,13 +7,13 @@ use std::env;
 use std::io::stdout;
 use std::str::FromStr;
 
+use chrono::NaiveDate;
+use clap::{Parser, Subcommand};
 use portpicker::{is_free, pick_unused_port};
-use tracing::error;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
 /// Default port when one isn't specified
-// This is Heroku's default port when running locally
 const PORT: u16 = 5000;
 
 /// Default log level
@@ -24,8 +24,41 @@ const LOG_LEVEL: LevelFilter = LevelFilter::WARN;
 const PORT_VAR: &str = "PORT";
 /// Log level
 const LOG_VAR: &str = "RUST_LOG";
-/// Redis database connection URL
-const REDIS_URL_VAR: &str = "REDIS_URL";
+/// Database connection URL
+const DATABASE_URL_VAR: &str = "DATABASE_URL";
+
+/// Parse a date given in the `YYYY-MM-DD` format from the CLI.
+fn parse_date(date_str: &str) -> Result<NaiveDate, String> {
+    NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|err| err.to_string())
+}
+
+#[derive(Parser)]
+#[command(
+    version,
+    name = "dilbert-viewer",
+    about = "Scrape and serve Dilbert comics from the Wayback Machine"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+/// The subcommands of the viewer app.
+#[derive(Subcommand)]
+enum Command {
+    /// Run the web viewer, serving comics from the database
+    Serve,
+    /// Scrape the Wayback Machine and write comics into the database
+    Populate {
+        /// Scrape only these dates (YYYY-MM-DD); the default is to scrape all dates
+        #[arg(value_parser = parse_date)]
+        date: Vec<NaiveDate>,
+
+        /// Re-scrape and overwrite dates that already exist in the database
+        #[arg(long)]
+        overwrite: bool,
+    },
+}
 
 /// Initialize the logger from the `RUST_LOG` environment variable, with a default.
 fn init_logger() -> WorkerGuard {
@@ -66,19 +99,24 @@ fn choose_port() -> u16 {
     }
 }
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> std::io::Result<()> {
+    let cli = Cli::parse();
+
+    let db_url = env::var(DATABASE_URL_VAR).unwrap_or_else(|_| {
+        format!("Missing environment variable for the database URL: {DATABASE_URL_VAR}")
+    });
+
     // The non-blocking writer stays active as long as `_guard` is not dropped.
     let _guard = init_logger();
 
-    let host = format!("0.0.0.0:{}", choose_port());
-
-    let db_url = if let Ok(db_url) = env::var(REDIS_URL_VAR) {
-        Some(db_url)
-    } else {
-        error!("Missing environment variable for the database URL: {REDIS_URL_VAR}");
-        None
-    };
-
-    dilbert_viewer::run(host, db_url, None, None, None).await
+    match cli.command {
+        Command::Serve => {
+            let host = format!("0.0.0.0:{}", choose_port());
+            dilbert_viewer::serve(host, db_url, None).await
+        }
+        Command::Populate { date, overwrite } => {
+            dilbert_viewer::populate(&db_url, date, overwrite, None, None).await
+        }
+    }
 }

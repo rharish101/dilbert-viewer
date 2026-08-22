@@ -5,21 +5,15 @@
 use std::time::Duration;
 
 use actix_web::rt::spawn;
-use awc::{
-    Client, ClientResponse,
-    http::{
-        Method, StatusCode,
-        header::{CONTENT_TYPE, LOCATION},
-    },
-};
 use chrono::NaiveDate;
-use dilbert_viewer::run;
+use dilbert_viewer::{serve, test};
 use portpicker::pick_unused_port;
+use reqwest::header::{CONTENT_TYPE, LOCATION};
+use reqwest::{Client, Response, StatusCode, redirect::Policy};
+use sea_orm::DatabaseConnection;
+use std::io;
 use test_case::test_case;
-use wiremock::{
-    Mock, MockServer, ResponseTemplate,
-    matchers::{method, path},
-};
+use tokio::task::JoinHandle;
 
 /// Hostname where to start the server
 const HOST: &str = "localhost";
@@ -31,18 +25,19 @@ const FIRST_COMIC: &str = "1989-04-16";
 const LAST_COMIC: &str = "2023-03-12";
 /// Date format used for URLs on "dilbert.com"
 const SRC_DATE_FMT: &str = "%Y-%m-%d";
-/// Path to the directory where test scraping files are stored
-const SCRAPING_TEST_CASE_PATH: &str = "testdata/scraping";
 /// Number of times to run the random comic test
 const RAND_TEST_ITER: usize = 10;
+/// Number of times to retry for transient failures
+const GET_FAIL_LIMIT: u32 = 50;
 
 /// Get the HTTP client.
 fn get_http_client() -> Client {
     let timeout = Duration::from_secs(RESP_TIMEOUT);
     Client::builder()
-        .disable_redirects()
+        .redirect(Policy::none())
         .timeout(timeout)
-        .finish()
+        .build()
+        .expect("Couldn't build the HTTP client")
 }
 
 /// Test if an HTTP response is a valid HTML page.
@@ -50,7 +45,7 @@ fn get_http_client() -> Client {
 /// # Arguments
 /// * `resp` - The HTTP response
 /// * `expected` - The expected Content-Type header
-async fn test_content_type<T>(resp: ClientResponse<T>, expected: &str) {
+fn test_content_type(resp: &Response, expected: &str) {
     // Check the "Content-Type" header.
     let content_type = resp
         .headers()
@@ -64,58 +59,96 @@ async fn test_content_type<T>(resp: ClientResponse<T>, expected: &str) {
     );
 }
 
-#[test_case("2000-01-01"; "sample date")]
-#[actix_web::test]
-/// Test whether the homepage gives the last comic.
+/// Create a named shared-cache in-memory SQLite database, sync the schema, and populate it
+/// with the given comics.
+///
+/// A *named* shared-cache DB (`file:<name>?mode=memory&cache=shared`) is used instead of
+/// plain `:memory:` because `serve()`'s connection pool opens multiple connections, and each
+/// connection to an unnamed `:memory:` database would get its own separate (empty) database.
+///
+/// Note that a shared-cache in-memory database only exists while at least one connection to it
+/// is open, so the returned connection must be kept alive for the duration of the test.
 ///
 /// # Arguments
-/// * `html_file_stem` - The file stem to the HTML page that is to be served for the last date.
-async fn test_last_comic(html_file_stem: &str) {
-    let port = pick_unused_port().expect("Couldn't find an available port");
+/// * `port` - A port unique to this test, used to make the database name unique
+/// * `comics` - The dates for which a comic is to be inserted
+///
+/// # Returns
+/// * The URL to connect to the database with
+/// * The connection that keeps the database alive
+async fn make_db(port: u16, comics: &[&str]) -> (String, DatabaseConnection) {
+    // The `file:` in the database name is percent-encoded, since the URL is first validated
+    // as a generic URL (where `file:` in the host position is invalid) before SQLx parses it.
+    let db_url = format!("sqlite://file%3Adilbert-{port}?mode=memory&cache=shared");
+    let dates: Vec<NaiveDate> = comics
+        .iter()
+        .map(|s| NaiveDate::parse_from_str(s, SRC_DATE_FMT).expect("Invalid test date"))
+        .collect();
+    let db = test::seed_db(&db_url, &dates)
+        .await
+        .expect("Couldn't seed the test database");
+    (db_url, db)
+}
+
+/// Start the server on the given port, backed by a database containing the given comics.
+///
+/// # Arguments
+/// * `port` - The port to start the server on
+/// * `comics` - The dates for which a comic is to be pre-populated in the database
+///
+/// # Returns
+/// * The spawned server task
+/// * The HTTP client
+/// * The connection that keeps the (in-memory) database alive
+async fn start_server(
+    port: u16,
+    comics: &[&str],
+) -> (JoinHandle<io::Result<()>>, Client, DatabaseConnection) {
+    let (db_url, db) = make_db(port, comics).await;
     let host = format!("{HOST}:{port}");
 
-    // Set up the mock server to serve the comic for the mocked last date.
-    let mock_server = MockServer::start().await;
-    let html =
-        tokio::fs::read_to_string(format!("{SCRAPING_TEST_CASE_PATH}/{html_file_stem}.html"))
-            .await
-            .expect("Couldn't get test page for scraping");
-    Mock::given(method(Method::GET.as_str()))
-        .and(path(format!("/strip/{LAST_COMIC}")))
-        .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html))
-        .mount(&mock_server)
-        .await;
-    Mock::given(method(Method::GET.as_str()))
-        .and(path("/cdx"))
-        .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string("2000"))
-        .mount(&mock_server)
-        .await;
-
     // Start the server on a single thread.
-    let handle = spawn(run(
-        host.clone(),
-        None,
-        Some(mock_server.uri()),
-        Some(format!("{}/cdx", mock_server.uri())),
-        Some(1),
-    ));
+    let handle = spawn(serve(host, db_url, Some(1)));
+    (handle, get_http_client(), db)
+}
 
-    let client = get_http_client();
-    let resp = client
-        .get(format!("http://{host}/"))
-        .send()
-        .await
-        .expect("Failed to send request to server");
+/// Send a GET request, retrying on transient failures while the server is starting up.
+///
+/// # Arguments
+/// * `client` - The HTTP client
+/// * `url` - The URL to request
+async fn send_get(client: &Client, url: &str) -> Response {
+    let mut last_err = None;
+    for _ in 0..GET_FAIL_LIMIT {
+        match client.get(url).send().await {
+            Ok(resp) => return resp,
+            // The server may not be listening yet.
+            Err(err) => {
+                last_err = Some(err);
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
+    panic!("Failed to send request to server: {}", last_err.unwrap());
+}
+
+#[actix_web::test]
+/// Test whether the homepage gives the last comic.
+async fn test_last_comic() {
+    let port = pick_unused_port().expect("Couldn't find an available port");
+    let (handle, client, _db) = start_server(port, &[LAST_COMIC]).await;
+    let resp = send_get(&client, &format!("http://{HOST}:{port}/")).await;
 
     // Close the server.
     handle.abort();
 
-    assert_eq!(resp.status(), StatusCode::OK, "Response status is not OK",);
-    test_content_type(resp, "text/html").await;
+    assert_eq!(resp.status(), StatusCode::OK, "Response status is not OK");
+    test_content_type(&resp, "text/html");
 }
 
-#[test_case(2000, 1, 1; "valid comic")]
-#[test_case(2000, 0, 0; "invalid comic")]
+#[test_case(2000, 1, 1, true; "existing comic")]
+#[test_case(2000, 1, 2, false; "valid date without a comic")]
+#[test_case(2000, 0, 0, false; "invalid date")]
 #[actix_web::test]
 /// Test a comic webpage.
 ///
@@ -123,61 +156,31 @@ async fn test_last_comic(html_file_stem: &str) {
 /// * `year` - The year of the comic
 /// * `month` - The month of the comic
 /// * `day` - The day of the comic
-async fn test_comic(year: i32, month: u32, day: u32) {
+/// * `has_comic` - Whether the comic for the given (valid) date is in the database
+async fn test_comic(year: i32, month: u32, day: u32, has_comic: bool) {
     let port = pick_unused_port().expect("Couldn't find an available port");
-    let host = format!("{HOST}:{port}");
 
     let date_str = format!("{year:04}-{month:02}-{day:02}");
-    let expected_status = if NaiveDate::from_ymd_opt(year, month, day).is_some() {
+    let expected_status = if NaiveDate::from_ymd_opt(year, month, day).is_some() && has_comic {
         StatusCode::OK
     } else {
         StatusCode::NOT_FOUND
     };
+    let comics = if expected_status == StatusCode::OK {
+        vec![date_str.as_str()]
+    } else {
+        vec![]
+    };
 
-    // Set up the mock server along with the HTML content.
-    let mock_server = MockServer::start().await;
-
-    // Mock the requested comic, only if it exists.
-    if let StatusCode::OK = expected_status {
-        let html = tokio::fs::read_to_string(format!("{SCRAPING_TEST_CASE_PATH}/{date_str}.html"))
-            .await
-            .expect("Couldn't get test page for scraping");
-        Mock::given(method(Method::GET.as_str()))
-            .and(path(format!("/strip/{date_str}")))
-            .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string(html))
-            .mount(&mock_server)
-            .await;
-    }
-
-    // Mock the Wayback Machine timestamp from the CDX API.
-    Mock::given(method(Method::GET.as_str()))
-        .and(path("/cdx"))
-        .respond_with(ResponseTemplate::new(StatusCode::OK.as_u16()).set_body_string("2000"))
-        .mount(&mock_server)
-        .await;
-
-    // Start the server on a single thread.
-    let handle = spawn(run(
-        host.clone(),
-        None,
-        Some(mock_server.uri()),
-        Some(format!("{}/cdx", mock_server.uri())),
-        Some(1),
-    ));
-
-    let client = get_http_client();
-    let resp = client
-        .get(format!("http://{host}/{date_str}"))
-        .send()
-        .await
-        .expect("Failed to send request to server");
+    let (handle, client, _db) = start_server(port, &comics).await;
+    let resp = send_get(&client, &format!("http://{HOST}:{port}/{date_str}")).await;
 
     // Close the server.
     handle.abort();
 
-    assert_eq!(resp.status(), expected_status, "Unexpected response status",);
-    if let StatusCode::OK = expected_status {
-        test_content_type(resp, "text/html").await;
+    assert_eq!(resp.status(), expected_status, "Unexpected response status");
+    if expected_status == StatusCode::OK {
+        test_content_type(&resp, "text/html");
     }
 }
 
@@ -185,30 +188,13 @@ async fn test_comic(year: i32, month: u32, day: u32) {
 /// Test the random comic request.
 async fn test_random_comic() {
     let port = pick_unused_port().expect("Couldn't find an available port");
-    let host = format!("{HOST}:{port}");
+    let (handle, client, _db) = start_server(port, &[]).await;
 
-    // Start the server on a single thread.
-    // The random comic generator shouldn't make any request to "dilbert.com", so make the URL
-    // empty.
-    let handle = spawn(run(
-        host.clone(),
-        None,
-        Some(String::new()),
-        Some(String::new()),
-        Some(1),
-    ));
-
-    let client = get_http_client();
     let first_comic = NaiveDate::parse_from_str(FIRST_COMIC, SRC_DATE_FMT).unwrap();
     let last_comic = NaiveDate::parse_from_str(LAST_COMIC, SRC_DATE_FMT).unwrap();
 
     for _ in 0..RAND_TEST_ITER {
-        let resp = client
-            .get(format!("http://{host}/random"))
-            .send()
-            .await
-            .expect("Failed to send request to server");
-
+        let resp = send_get(&client, &format!("http://{HOST}:{port}/random")).await;
         assert_eq!(
             resp.status(),
             StatusCode::TEMPORARY_REDIRECT,
@@ -248,28 +234,12 @@ async fn test_random_comic() {
 /// * `content_type` - The expected Content-Type header
 async fn test_static(path: &str, status_code: StatusCode, content_type: &str) {
     let port = pick_unused_port().expect("Couldn't find an available port");
-    let host = format!("{HOST}:{port}");
-
-    // Start the server on a single thread.
-    // The static file service shouldn't make any request to "dilbert.com", so make the URL empty.
-    let handle = spawn(run(
-        host.clone(),
-        None,
-        Some(String::new()),
-        Some(String::new()),
-        Some(1),
-    ));
-
-    let client = get_http_client();
-    let resp = client
-        .get(format!("http://{host}/{path}"))
-        .send()
-        .await
-        .expect("Failed to send request to server");
+    let (handle, client, _db) = start_server(port, &[]).await;
+    let resp = send_get(&client, &format!("http://{HOST}:{port}/{path}")).await;
 
     // Close the server.
     handle.abort();
 
-    assert_eq!(resp.status(), status_code, "Unexpected response status",);
-    test_content_type(resp, content_type).await;
+    assert_eq!(resp.status(), status_code, "Unexpected response status");
+    test_content_type(&resp, content_type);
 }

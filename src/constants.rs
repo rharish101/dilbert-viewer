@@ -16,32 +16,36 @@ pub const SRC_DATE_FMT: &str = "%Y-%m-%d";
 pub const DISP_DATE_FMT: &str = "%A %B %d, %Y";
 
 // ==================================================
-// Parameters for scraping from "dilbert.com"
+// Parameters for scraping from the Wayback Machine
 // ==================================================
+/// Max number of dates scraped concurrently
+pub const MAX_CONC_SCRAPES: usize = 5;
+/// Delay between each scrape
+pub const SCRAPE_DELAY: u64 = 2;
 /// Timeout (in seconds) for getting a response
-pub const RESP_TIMEOUT: u64 = 10;
+pub const RESP_TIMEOUT: u64 = 30;
+/// User agent string (required by Wayback Machine) in the format `{tool-name}/{version}`
+pub const USER_AGENT: &str = "dilbert-viewer/0.4.0";
+/// Base URL for Wayback Machine lookups
+pub const ARC_BASE_URL: &str =
+    "https://web.archive.org/web/{timestamp}/https://dilbert.com/strip/{date}";
+/// URL for archive.org CDX API
+// Docs: https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server
+pub const CDX_URL: &str = "https://web.archive.org/cdx/search/cdx?url=https://dilbert.com/strip/{date}&fl=timestamp&filter=statuscode:^2&limit=-1&to=20230312";
 
 // ==================================================
-// Parameters for caching to the database
+// Parameters related to the database
 // ==================================================
-/// Limit for connections to the cache database
-// Heroku's free tier limit is 20.
-pub const MAX_DB_CONN: usize = 19;
+/// Limit for connections to the database
+pub const MAX_DB_CONN: u32 = 19;
 /// Timeout (in seconds) for a single database operation
 pub const DB_TIMEOUT: u64 = 5;
+/// Module path prefix for the schema registry, covering all entities
+pub const ENTITY_PREFIX: &str = "dilbert-viewer::entities::*";
 
 // ==================================================
 // Miscellaneous
 // ==================================================
-/// Base URL for "dilbert.com"
-pub const SRC_BASE_URL: &str = "https://dilbert.com/";
-/// Base URL for Wayback Machine lookups
-pub const ARC_BASE_URL: &str = "https://web.archive.org/web/{}/https://dilbert.com";
-/// URL for archive.org CDX API
-// Docs: https://github.com/internetarchive/wayback/tree/master/wayback-cdx-server
-pub const CDX_URL: &str = "https://web.archive.org/cdx/search/cdx?url={}&fl=timestamp&filter=statuscode:^2&limit=-1&to=20230312";
-/// URL path prefix for each comic on "dilbert.com"
-pub const SRC_COMIC_PREFIX: &str = "strip/";
 /// Link to the public version of this app
 // Used in the OpenGraph tags
 pub const APP_URL: &str = "https://dilbert-viewer.rharish.dev/";
