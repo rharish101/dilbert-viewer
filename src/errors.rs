@@ -35,7 +35,7 @@ pub enum ViewerError {
     Db(#[from] DbErr),
     /// Errors in parsing dates
     #[error("Error parsing date: {0}")]
-    DateParse(#[from] chrono::format::ParseError),
+    DateParse(#[from] jiff::Error),
     /// Errors in building HTML templates
     #[error("Error building HTML template: {0}")]
     Template(#[from] askama::Error),

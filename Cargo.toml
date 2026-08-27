@@ -26,6 +26,7 @@ clap = { version = "4.6.6", features = ["derive"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 html-escape = "0.2.9"
 indicatif = { version = "0.18.6", features = ["futures"] }
+jiff = { version = "0.2.35", features = ["std"] }
 minifier = "0.4.0"
 minify-html = { version = "0.18.1", package = "minify-html-onepass" }
 mockall_double = "0.3.0"

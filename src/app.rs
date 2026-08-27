@@ -8,7 +8,7 @@ use std::path::Path;
 
 use actix_web::{HttpResponse, http::header::ContentType};
 use askama::Template;
-use chrono::{NaiveDate, TimeDelta};
+use jiff::{Span, civil::Date};
 use sea_orm::DatabaseConnection;
 use tracing::{debug, error};
 
@@ -31,7 +31,7 @@ impl Viewer {
     }
 
     /// Get the info about the requested comic.
-    async fn get_comic_info(&self, date: &NaiveDate) -> ViewerResult<ComicData> {
+    async fn get_comic_info(&self, date: &Date) -> ViewerResult<ComicData> {
         if let Some(comic_data) = get_comic(&self.db, *date).await? {
             debug!("Retrieved data from DB: {comic_data:?}");
             Ok(comic_data)
@@ -46,7 +46,7 @@ impl Viewer {
     ///
     /// # Arguments
     /// * `date` - The date of the requested comic
-    pub async fn serve_comic(&self, date: &NaiveDate) -> HttpResponse {
+    pub async fn serve_comic(&self, date: &Date) -> HttpResponse {
         match self
             .get_comic_info(date)
             .await
@@ -81,22 +81,22 @@ fn minify_html(mut html: String) -> ViewerResult<String> {
 /// # Arguments
 /// * `date` - The date of the comic
 /// * `comic_data` - The scraped comic data
-fn serve_template(date: &NaiveDate, comic_data: &ComicData) -> ViewerResult<HttpResponse> {
+fn serve_template(date: &Date, comic_data: &ComicData) -> ViewerResult<HttpResponse> {
     let first_comic = str_to_date(FIRST_COMIC, SRC_DATE_FMT)?;
     let last_comic = str_to_date(LAST_COMIC, SRC_DATE_FMT)?;
 
     // Links to previous and next comics
-    let previous_comic = &max(first_comic, *date - TimeDelta::days(1))
-        .format(SRC_DATE_FMT)
+    let previous_comic = &max(first_comic, *date - Span::new().days(1))
+        .strftime(SRC_DATE_FMT)
         .to_string();
-    let next_comic = &min(last_comic, *date + TimeDelta::days(1))
-        .format(SRC_DATE_FMT)
+    let next_comic = &min(last_comic, *date + Span::new().days(1))
+        .strftime(SRC_DATE_FMT)
         .to_string();
 
     let template = ComicTemplate {
         data: comic_data,
-        date_disp: &date.format(DISP_DATE_FMT).to_string(),
-        date: &date.format(SRC_DATE_FMT).to_string(),
+        date_disp: &date.strftime(DISP_DATE_FMT).to_string(),
+        date: &date.strftime(SRC_DATE_FMT).to_string(),
         first_comic: FIRST_COMIC,
         previous_comic,
         next_comic,
@@ -191,8 +191,8 @@ pub async fn serve_js(path: &Path) -> HttpResponse {
 }
 
 /// Serve a 404 not found response for invalid URLs, without handling errors.
-fn serve_404_raw(date: Option<&NaiveDate>) -> ViewerResult<HttpResponse> {
-    let date_str = date.map(|date| date.format(SRC_DATE_FMT).to_string());
+fn serve_404_raw(date: Option<&Date>) -> ViewerResult<HttpResponse> {
+    let date_str = date.map(|date| date.strftime(SRC_DATE_FMT).to_string());
     let template = NotFoundTemplate {
         date: date_str.as_deref(),
         repo_url: REPO_URL,
@@ -210,7 +210,7 @@ fn serve_404_raw(date: Option<&NaiveDate>) -> ViewerResult<HttpResponse> {
 /// # Arguments
 /// * `date` - The date of the requested comic, if available. This must be a valid date for
 ///   which a comic doesn't exist.
-pub fn serve_404(date: Option<&NaiveDate>) -> HttpResponse {
+pub fn serve_404(date: Option<&Date>) -> HttpResponse {
     match serve_404_raw(date) {
         Ok(response) => response,
         Err(err) => serve_500(&err),
@@ -315,8 +315,8 @@ mod tests {
     /// * `comic_month` - The month of the comic
     /// * `comic_day` - The day of the comic
     /// * `title` - The title of the comic
-    fn test_template_rendering(comic_year: i32, comic_month: u32, comic_day: u32, title: &str) {
-        let comic_date = NaiveDate::from_ymd_opt(comic_year, comic_month, comic_day)
+    fn test_template_rendering(comic_year: i16, comic_month: u8, comic_day: u8, title: &str) {
+        let comic_date = Date::new(comic_year, comic_month as i8, comic_day as i8)
             .expect("Invalid test parameters");
         let comic_data = ComicData {
             title: title.into(),
@@ -337,9 +337,9 @@ mod tests {
     ///
     /// # Arguments
     /// * `date_ymd` - A tuple containing the year, month and day of the missing comic, if any
-    fn test_404_page(date_ymd: Option<(i32, u32, u32)>) {
+    fn test_404_page(date_ymd: Option<(i16, u8, u8)>) {
         let date = date_ymd.map(|ymd| {
-            NaiveDate::from_ymd_opt(ymd.0, ymd.1, ymd.2).expect("Invalid test parameters")
+            Date::new(ymd.0, ymd.1 as i8, ymd.2 as i8).expect("Invalid test parameters")
         });
         let resp = serve_404_raw(date.as_ref()).expect("Error generating 404 page");
 
@@ -446,8 +446,8 @@ mod tests {
     /// * The "mocked" viewer
     /// * The test comic date
     /// * The test comic data
-    async fn get_mock_viewer(state: GetComicInfoState) -> (Viewer, NaiveDate, ComicData) {
-        let comic_date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+    async fn get_mock_viewer(state: GetComicInfoState) -> (Viewer, Date, ComicData) {
+        let comic_date = Date::new(2000, 1, 1).expect("Valid test date");
         let comic_data = ComicData {
             title: String::new(),
             img_url: String::new(),

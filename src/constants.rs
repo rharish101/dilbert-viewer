@@ -72,14 +72,14 @@ mod tests {
     use std::path::Path;
 
     use actix_web::middleware::DefaultHeaders;
-    use chrono::NaiveDate;
     use content_security_policy as csp;
+    use jiff::civil::Date;
 
     #[test]
     /// Test whether the first comic date is in the expected format.
     fn test_first_comic_format() {
         assert!(
-            NaiveDate::parse_from_str(FIRST_COMIC, SRC_DATE_FMT).is_ok(),
+            Date::strptime(SRC_DATE_FMT, FIRST_COMIC).is_ok(),
             "FIRST_COMIC doesn't match SRC_DATE_FMT"
         )
     }
@@ -87,21 +87,17 @@ mod tests {
     #[test]
     /// Test whether the date format for "dilbert.com" is valid.
     fn test_src_date_format() {
-        NaiveDate::from_ymd_opt(2000, 1, 1)
-            .unwrap()
-            .format(SRC_DATE_FMT)
-            // This should panic at `.to_string` if the format is invalid.
-            .to_string();
+        // This should error if the format is invalid.
+        jiff::fmt::strtime::format(SRC_DATE_FMT, Date::new(2000, 1, 1).unwrap())
+            .expect("SRC_DATE_FMT is not a valid format");
     }
 
     #[test]
     /// Test whether the date format used for displaying is valid.
     fn test_disp_date_format() {
-        NaiveDate::from_ymd_opt(2000, 1, 1)
-            .unwrap()
-            .format(DISP_DATE_FMT)
-            // This should panic at `.to_string` if the format is invalid.
-            .to_string();
+        // This should error if the format is invalid.
+        jiff::fmt::strtime::format(DISP_DATE_FMT, Date::new(2000, 1, 1).unwrap())
+            .expect("DISP_DATE_FMT is not a valid format");
     }
 
     #[test]

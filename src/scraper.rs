@@ -4,10 +4,10 @@
 
 //! Scraper to get info for requested Dilbert comics
 
-use chrono::{NaiveDate, TimeDelta};
 use futures_util::stream::{StreamExt, iter};
 use html_escape::decode_html_entities;
 use indicatif::ProgressBar;
+use jiff::{Span, civil::Date};
 #[cfg(test)]
 use mockall::automock;
 use reqwest::{Client, StatusCode, redirect::Policy};
@@ -83,8 +83,8 @@ mod inner {
         }
 
         /// Scrape the comic data of the requested date from the source.
-        pub(super) async fn scrape_data(&self, date: &NaiveDate) -> ScraperResult<ComicData> {
-            let date_str = date.format(SRC_DATE_FMT).to_string();
+        pub(super) async fn scrape_data(&self, date: &Date) -> ScraperResult<ComicData> {
+            let date_str = date.strftime(SRC_DATE_FMT).to_string();
             let resp = self
                 .http_client
                 .get(self.cdx_url.replace("{date}", &date_str))
@@ -228,18 +228,18 @@ mod comic {
     }
 
     /// All dates from `FIRST_COMIC` to `LAST_COMIC` (inclusive).
-    fn all_dates() -> Vec<NaiveDate> {
+    fn all_dates() -> Vec<Date> {
         let first = str_to_date(FIRST_COMIC, SRC_DATE_FMT)
             .expect("Variable FIRST_COMIC not in format of variable SRC_DATE_FMT");
         let last = str_to_date(LAST_COMIC, SRC_DATE_FMT)
             .expect("Variable LAST_COMIC not in format of variable SRC_DATE_FMT");
 
-        // `NaiveDate` doesn't implement `Step`, so iterate manually.
+        // `Date` doesn't implement `Step`, so iterate manually.
         let mut dates = Vec::new();
         let mut current = first;
         while current <= last {
             dates.push(current);
-            current += TimeDelta::days(1);
+            current += Span::new().days(1);
         }
         dates
     }
@@ -263,7 +263,7 @@ mod comic {
         #[instrument(skip(self))]
         pub(super) async fn scrape_comic_data(
             &self,
-            date: &NaiveDate,
+            date: &Date,
             overwrite: bool,
         ) -> ScraperResult<ScrapeOutcome> {
             if !overwrite && get_comic(&self.db, *date).await?.is_some() {
@@ -292,7 +292,7 @@ mod comic {
         #[instrument(skip(self))]
         pub async fn scrape_comic_data_multi(
             &self,
-            dates: Vec<NaiveDate>,
+            dates: Vec<Date>,
             overwrite: bool,
         ) -> PopulateSummary {
             let dates = if dates.is_empty() { all_dates() } else { dates };
@@ -383,12 +383,12 @@ mod tests {
     /// * `comic_data` - The tuple for the comic data containing the title, image URL, image width
     ///                  and image height
     async fn test_comic_scraping(
-        date_ymd: (i32, u32, u32),
+        date_ymd: (i16, u8, u8),
         missing: bool,
         comic_data: (&str, &str, i32, i32),
     ) {
         let mock_server = MockServer::start().await;
-        let date = NaiveDate::from_ymd_opt(date_ymd.0, date_ymd.1, date_ymd.2)
+        let date = Date::new(date_ymd.0, date_ymd.1 as i8, date_ymd.2 as i8)
             .expect("Invalid test parameters");
 
         let scraper = InnerComicScraper::new(
@@ -396,7 +396,7 @@ mod tests {
             format!("{}/cdx/{{date}}", mock_server.uri()),
         );
 
-        let date_str = date.format(SRC_DATE_FMT).to_string();
+        let date_str = date.strftime(SRC_DATE_FMT).to_string();
         let timestamp_mock = "2000";
         let expected = ComicData {
             title: comic_data.0.into(),
@@ -471,7 +471,7 @@ mod tests {
     /// * `existing` - The comic data already present in the database, if any
     /// * `outcome` - The outcome of the mocked scrape
     async fn test_scrape_comic_data(overwrite: bool, existing: bool, outcome: MockScrapeOutcome) {
-        let date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+        let date = Date::new(2000, 1, 1).unwrap();
 
         let existing_data = ComicData {
             title: "Existing".into(),
@@ -550,12 +550,12 @@ mod tests {
     }
 
     /// Test dates, one per outcome.
-    fn test_dates() -> (NaiveDate, NaiveDate, NaiveDate, NaiveDate) {
+    fn test_dates() -> (Date, Date, Date, Date) {
         (
-            NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
-            NaiveDate::from_ymd_opt(2020, 1, 1).unwrap(),
-            NaiveDate::from_ymd_opt(2010, 1, 4).unwrap(),
-            NaiveDate::from_ymd_opt(2015, 6, 1).unwrap(),
+            Date::new(2000, 1, 1).unwrap(),
+            Date::new(2020, 1, 1).unwrap(),
+            Date::new(2010, 1, 4).unwrap(),
+            Date::new(2015, 6, 1).unwrap(),
         )
     }
 
@@ -577,10 +577,7 @@ mod tests {
     /// # Arguments
     /// * `db` - The database connection the scraper uses
     /// * `dates` - The `(populated, skipped, empty, failed)` test dates
-    fn outcome_scraper(
-        db: DatabaseConnection,
-        dates: (NaiveDate, NaiveDate, NaiveDate, NaiveDate),
-    ) -> ComicScraper {
+    fn outcome_scraper(db: DatabaseConnection, dates: (Date, Date, Date, Date)) -> ComicScraper {
         let (populated_date, _skipped_date, empty_date, failed_date) = dates;
 
         let mut inner = MockInnerComicScraper::default();
