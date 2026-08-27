@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use chrono::NaiveDate;
+use jiff::civil::Date;
 use sea_orm::DbErr;
 use sea_orm::{
     ConnectOptions, Database, DatabaseConnection, EntityTrait, Set, sea_query::OnConflict,
@@ -50,9 +51,9 @@ pub(crate) async fn ensure_schema(db: &DatabaseConnection) -> Result<(), DbErr> 
 /// scraped yet.
 pub(crate) async fn get_comic(
     db: &DatabaseConnection,
-    date: NaiveDate,
+    date: Date,
 ) -> Result<Option<ComicData>, DbErr> {
-    let comic_data = comic::Entity::find_by_id(date)
+    let comic_data = comic::Entity::find_by_id(naive_date(date))
         .one(db)
         .await?
         .map(ComicData::from);
@@ -73,12 +74,12 @@ pub(crate) async fn get_comic(
 /// * `overwrite` - Whether to overwrite data if a comic already exists
 pub(crate) async fn insert_comic(
     db: &DatabaseConnection,
-    date: NaiveDate,
+    date: Date,
     comic_data: ComicData,
     overwrite: bool,
 ) -> Result<(), DbErr> {
     debug!("Attempting to update database with: {comic_data:?}, overwrite: {overwrite}");
-    let model = comic::ActiveModel::from((date, comic_data));
+    let model = comic::ActiveModel::from((naive_date(date), comic_data));
     let mut on_conflict = OnConflict::column(comic::COLUMN.date);
     if overwrite {
         on_conflict
@@ -112,6 +113,17 @@ impl From<comic::Model> for ComicData {
     }
 }
 
+/// Convert a Jiff date into a Chrono one for storage in the database.
+///
+/// SeaORM (via SQLx) only supports Chrono for SQL `DATE` columns, so Chrono
+/// is confined to this conversion at the database boundary.
+///
+/// A Jiff date is always a valid Chrono date, so this cannot fail.
+fn naive_date(date: Date) -> NaiveDate {
+    NaiveDate::from_ymd_opt(date.year() as i32, date.month() as u32, date.day() as u32)
+        .expect("A jiff date is always valid, but the conversion still failed")
+}
+
 /// Convert a date and comic data into an entity.
 impl From<(NaiveDate, ComicData)> for comic::ActiveModel {
     fn from((date, data): (NaiveDate, ComicData)) -> Self {
@@ -132,8 +144,8 @@ pub(super) mod tests {
     use test_case::test_case;
 
     /// A test date (a weekday, so a real comic exists on this date).
-    fn test_date() -> NaiveDate {
-        NaiveDate::from_ymd_opt(2000, 1, 15).unwrap()
+    fn test_date() -> Date {
+        Date::new(2000, 1, 15).unwrap()
     }
 
     /// Test comic data with the given title.

@@ -24,7 +24,7 @@ use actix_web::{
     middleware::{Compress, DefaultHeaders, Logger},
     web,
 };
-use chrono::NaiveDate;
+use jiff::civil::Date;
 use tracing::{error, info};
 
 use crate::app::{Viewer, serve_404};
@@ -37,7 +37,7 @@ use crate::scraper::ComicScraper;
 #[cfg(feature = "test-support")]
 /// Test-only helpers for the integration tests
 pub mod test {
-    use chrono::NaiveDate;
+    use jiff::civil::Date;
     use sea_orm::{DatabaseConnection, DbErr};
 
     use crate::db::{ensure_schema, init_db, insert_comic};
@@ -49,7 +49,7 @@ pub mod test {
     /// # Arguments
     /// * `url` - The URL to connect to the database with
     /// * `dates` - The dates for which a placeholder comic is to be inserted
-    pub async fn seed_db(url: &str, dates: &[NaiveDate]) -> Result<DatabaseConnection, DbErr> {
+    pub async fn seed_db(url: &str, dates: &[Date]) -> Result<DatabaseConnection, DbErr> {
         let db = init_db(url).await?;
         ensure_schema(&db).await?;
         for &date in dates {
@@ -150,7 +150,7 @@ pub async fn serve(host: String, db_url: String, workers: Option<usize>) -> std:
 /// * `cdx_url` - The optional URL to the custom CDX API
 pub async fn populate(
     db_url: &str,
-    dates: Vec<NaiveDate>,
+    dates: Vec<Date>,
     overwrite: bool,
     source_url: Option<String>,
     cdx_url: Option<String>,

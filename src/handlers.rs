@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use actix_web::{HttpResponse, Responder, get, http::header::LOCATION, web};
-use chrono::{NaiveDate, TimeDelta};
+use jiff::{Span, civil::Date};
 use rand::{RngExt, rng};
 use tracing::info;
 
@@ -28,13 +28,15 @@ async fn last_comic(viewer: web::Data<Viewer>) -> impl Responder {
 
 /// Serve the comic requested in the given URL.
 #[get("/{year}-{month}-{day}")]
-async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(i32, u32, u32)>) -> impl Responder {
+async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(i16, u8, u8)>) -> impl Responder {
     let (year, month, day) = path.into_inner();
 
     // Check to see if the date is invalid.
-    if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
+    if let Ok(date) = Date::new(year, month as i8, day as i8) {
         viewer.serve_comic(&date).await
     } else {
+        // Note: Numbers too large to fit in Jiff's native types (e.g. a 5-digit year) are rejected
+        // by actix as 400s before this is even called.
         info!("Invalid date requested: ({year}-{month}-{day})");
         serve_404(None)
     }
@@ -50,11 +52,11 @@ async fn random_comic() -> impl Responder {
 
     let mut rng = rng();
     // Offset (in days) from the first date
-    let rand_offset = rng.random_range(0..(last - first).num_days());
-    let rand_date = first + TimeDelta::days(rand_offset);
+    let rand_offset = rng.random_range(0..(last - first).get_days());
+    let rand_date = first + Span::new().days(rand_offset);
     info!("Chose random comic date: {rand_date}");
 
-    let location = format!("/{}", rand_date.format(SRC_DATE_FMT));
+    let location = format!("/{}", rand_date.strftime(SRC_DATE_FMT));
     HttpResponse::TemporaryRedirect()
         .append_header((LOCATION, location))
         .finish()

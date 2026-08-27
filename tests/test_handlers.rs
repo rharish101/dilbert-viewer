@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use actix_web::rt::spawn;
-use chrono::NaiveDate;
 use dilbert_viewer::{serve, test};
+use jiff::civil::Date;
 use portpicker::pick_unused_port;
 use reqwest::header::{CONTENT_TYPE, LOCATION};
 use reqwest::{Client, Response, StatusCode, redirect::Policy};
@@ -23,8 +23,6 @@ const RESP_TIMEOUT: u64 = 5;
 const FIRST_COMIC: &str = "1989-04-16";
 /// Date of the last available Dilbert comic
 const LAST_COMIC: &str = "2023-03-12";
-/// Date format used for URLs on "dilbert.com"
-const SRC_DATE_FMT: &str = "%Y-%m-%d";
 /// Number of times to run the random comic test
 const RAND_TEST_ITER: usize = 10;
 /// Number of times to retry for transient failures
@@ -80,9 +78,9 @@ async fn make_db(port: u16, comics: &[&str]) -> (String, DatabaseConnection) {
     // The `file:` in the database name is percent-encoded, since the URL is first validated
     // as a generic URL (where `file:` in the host position is invalid) before SQLx parses it.
     let db_url = format!("sqlite://file%3Adilbert-{port}?mode=memory&cache=shared");
-    let dates: Vec<NaiveDate> = comics
+    let dates: Vec<Date> = comics
         .iter()
-        .map(|s| NaiveDate::parse_from_str(s, SRC_DATE_FMT).expect("Invalid test date"))
+        .map(|s| s.parse::<Date>().expect("Invalid test date"))
         .collect();
     let db = test::seed_db(&db_url, &dates)
         .await
@@ -157,11 +155,12 @@ async fn test_last_comic() {
 /// * `month` - The month of the comic
 /// * `day` - The day of the comic
 /// * `has_comic` - Whether the comic for the given (valid) date is in the database
-async fn test_comic(year: i32, month: u32, day: u32, has_comic: bool) {
+async fn test_comic(year: i16, month: u8, day: u8, has_comic: bool) {
     let port = pick_unused_port().expect("Couldn't find an available port");
 
     let date_str = format!("{year:04}-{month:02}-{day:02}");
-    let expected_status = if NaiveDate::from_ymd_opt(year, month, day).is_some() && has_comic {
+    // Mirrors the validation in the `comic_page` handler.
+    let expected_status = if Date::new(year, month as i8, day as i8).is_ok() && has_comic {
         StatusCode::OK
     } else {
         StatusCode::NOT_FOUND
@@ -190,8 +189,8 @@ async fn test_random_comic() {
     let port = pick_unused_port().expect("Couldn't find an available port");
     let (handle, client, _db) = start_server(port, &[]).await;
 
-    let first_comic = NaiveDate::parse_from_str(FIRST_COMIC, SRC_DATE_FMT).unwrap();
-    let last_comic = NaiveDate::parse_from_str(LAST_COMIC, SRC_DATE_FMT).unwrap();
+    let first_comic = FIRST_COMIC.parse::<Date>().unwrap();
+    let last_comic = LAST_COMIC.parse::<Date>().unwrap();
 
     for _ in 0..RAND_TEST_ITER {
         let resp = send_get(&client, &format!("http://{HOST}:{port}/random")).await;
@@ -208,7 +207,8 @@ async fn test_random_comic() {
             .expect("Missing Location header")
             .to_str()
             .expect("Location header is not ASCII");
-        let random_date = NaiveDate::parse_from_str(&location[1..], SRC_DATE_FMT)
+        let random_date = location[1..]
+            .parse::<Date>()
             .expect("Redirected to invalid date");
         assert!(
             random_date >= first_comic && random_date <= last_comic,

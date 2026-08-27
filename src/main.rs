@@ -7,8 +7,8 @@ use std::env;
 use std::io::stdout;
 use std::str::FromStr;
 
-use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
+use jiff::civil::Date;
 use portpicker::{is_free, pick_unused_port};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
@@ -28,8 +28,8 @@ const LOG_VAR: &str = "RUST_LOG";
 const DATABASE_URL_VAR: &str = "DATABASE_URL";
 
 /// Parse a date given in the `YYYY-MM-DD` format from the CLI.
-fn parse_date(date_str: &str) -> Result<NaiveDate, String> {
-    NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|err| err.to_string())
+fn parse_date(date_str: &str) -> Result<Date, String> {
+    date_str.parse::<Date>().map_err(|err| err.to_string())
 }
 
 #[derive(Parser)]
@@ -52,7 +52,7 @@ enum Command {
     Populate {
         /// Scrape only these dates (YYYY-MM-DD); the default is to scrape all dates
         #[arg(value_parser = parse_date)]
-        date: Vec<NaiveDate>,
+        date: Vec<Date>,
 
         /// Re-scrape and overwrite dates that already exist in the database
         #[arg(long)]
