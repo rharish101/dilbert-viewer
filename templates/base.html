@@ -47,7 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
     >
       <!-- Link to the GitHub repo -->
       <a
-        href="{{ repo_url }}"
+        href="{{ env!("CARGO_PKG_REPOSITORY") }}"
         target="_blank"
         rel="noreferrer"
         role="button"

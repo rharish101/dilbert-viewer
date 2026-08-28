@@ -35,7 +35,7 @@ fn parse_date(date_str: &str) -> Result<Date, String> {
 #[derive(Parser)]
 #[command(
     version,
-    name = "dilbert-viewer",
+    name = env!("CARGO_PKG_NAME"),
     about = "Scrape and serve Dilbert comics from the Wayback Machine"
 )]
 struct Cli {

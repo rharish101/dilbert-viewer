@@ -25,7 +25,10 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   <!-- Message for reporting issues -->
   <p class="m-1">
     If you see this message often, you can report an issue by
-    <a href="{{ repo_url }}/issues" target="_blank" rel="noreferrer"
+    <a
+      href="{{ env!("CARGO_PKG_REPOSITORY") }}/issues"
+      target="_blank"
+      rel="noreferrer"
       >clicking here</a
     >. Please check for existing issues before reporting them.
   </p>

@@ -25,7 +25,7 @@ pub const SCRAPE_DELAY: u64 = 2;
 /// Timeout (in seconds) for getting a response
 pub const RESP_TIMEOUT: u64 = 30;
 /// User agent string (required by Wayback Machine) in the format `{tool-name}/{version}`
-pub const USER_AGENT: &str = "dilbert-viewer/0.4.0";
+pub const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 /// Base URL for Wayback Machine lookups
 pub const ARC_BASE_URL: &str =
     "https://web.archive.org/web/{timestamp}/https://dilbert.com/strip/{date}";
@@ -41,17 +41,11 @@ pub const MAX_DB_CONN: u32 = 19;
 /// Timeout (in seconds) for a single database operation
 pub const DB_TIMEOUT: u64 = 5;
 /// Module path prefix for the schema registry, covering all entities
-pub const ENTITY_PREFIX: &str = "dilbert-viewer::entities::*";
+pub const ENTITY_PREFIX: &str = concat!(env!("CARGO_PKG_NAME"), "::entities::*");
 
 // ==================================================
 // Miscellaneous
 // ==================================================
-/// Link to the public version of this app
-// Used in the OpenGraph tags
-pub const APP_URL: &str = "https://dilbert-viewer.rharish.dev/";
-/// Link to the public version of this repo
-// Mainly for publicity :P
-pub const REPO_URL: &str = "https://github.com/rharish101/dilbert-viewer";
 /// URL path for static files
 // This is set to root as it's easy to serve robots.txt by keeping it in static.
 pub const STATIC_URL: &str = "/";
