@@ -12,7 +12,7 @@ use jiff::{Span, civil::Date};
 use sea_orm::DatabaseConnection;
 use tracing::{debug, error};
 
-use crate::constants::{APP_URL, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, REPO_URL, SRC_DATE_FMT};
+use crate::constants::{DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT};
 use crate::datetime::str_to_date;
 use crate::db::get_comic;
 use crate::errors::{MinificationError, ViewerError, ViewerResult};
@@ -103,8 +103,6 @@ fn serve_template(date: &Date, comic_data: &ComicData) -> ViewerResult<HttpRespo
         disable_left_nav: *date == first_comic,
         disable_right_nav: *date == last_comic,
         permalink: &comic_data.permalink,
-        app_url: APP_URL,
-        repo_url: REPO_URL,
     };
     debug!("Rendering comic template: {template:?}");
 
@@ -195,7 +193,6 @@ fn serve_404_raw(date: Option<&Date>) -> ViewerResult<HttpResponse> {
     let date_str = date.map(|date| date.strftime(SRC_DATE_FMT).to_string());
     let template = NotFoundTemplate {
         date: date_str.as_deref(),
-        repo_url: REPO_URL,
     };
     debug!("Rendering 404 template: {template:?}");
     Ok(HttpResponse::NotFound()
@@ -225,10 +222,7 @@ pub fn serve_500(err: &ViewerError) -> HttpResponse {
     let error = &format!("{err}");
     let mut response = HttpResponse::InternalServerError();
 
-    let error_template = ErrorTemplate {
-        error,
-        repo_url: REPO_URL,
-    };
+    let error_template = ErrorTemplate { error };
     debug!("Rendering 500 template: {error_template:?}");
     match error_template.render() {
         Ok(webpage) => {
@@ -320,7 +314,7 @@ mod tests {
             .expect("Invalid test parameters");
         let comic_data = ComicData {
             title: title.into(),
-            img_url: REPO_URL.into(), // Any URL should technically work.
+            img_url: env!("CARGO_PKG_REPOSITORY").into(), // Any URL should technically work.
             img_width: 1,
             img_height: 1,
             permalink: String::new(),
