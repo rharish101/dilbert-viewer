@@ -3,13 +3,15 @@ SPDX-FileCopyrightText: 2022 Harish Rajagopal <harish.rajagopals@gmail.com>
 
 SPDX-License-Identifier: AGPL-3.0-or-later
 #}
-
 {% extends "base.html" %}
 
 {% block title %}Not Found{% endblock %}
 
 {% block head %}
-  <meta name="description" content="A simple comic viewer for Dilbert by Scott Adams." />
+  <meta
+    name="description"
+    content="A simple comic viewer for Dilbert by Scott Adams."
+  />
 {% endblock %}
 
 {% block content %}
@@ -17,16 +19,16 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
   <!-- Use a specific error message for a comic, if available -->
   <p class="lead m-1 mb-4">
+    <!-- prettier-ignore-start -->
     {% match date %}
       {% when Some with (date) %}
         Comic for {{ date }} not found
       {% when None %}
         Invalid URL
     {% endmatch %}
+    <!-- prettier-ignore-end -->
   </p>
 
   <!-- Redirect users to homepage -->
-  <p class="m-1 mb-4">
-    <a href="/">Click here</a> to go to the homepage.
-  </p>
+  <p class="m-1 mb-4"><a href="/">Click here</a> to go to the homepage.</p>
 {% endblock %}

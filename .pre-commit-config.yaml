@@ -6,13 +6,24 @@ repos:
   - repo: https://github.com/doublify/pre-commit-rust
     rev: v1.0
     hooks:
-    - id: fmt
-    - id: clippy
-      args: [--tests, --, -D, warnings]
+      - id: fmt
+      - id: clippy
+        args: [--tests, --, --deny, warnings]
   - repo: https://github.com/DevinR528/cargo-sort
     rev: v2.1.4
     hooks:
-    - id: cargo-sort
+      - id: cargo-sort
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: prettier
+        args: [--write, --ignore-unknown]
+        language: node
+        types: [text]
+        additional_dependencies:
+          - prettier@3.9.6
+          - prettier-plugin-jinja-template@2.2.0
   - repo: https://github.com/fsfe/reuse-tool
     rev: v6.2.0
     hooks:

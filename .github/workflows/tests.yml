@@ -6,9 +6,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,21 +17,26 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Install Rust
-      id: toolchain
-      uses: actions-rs/toolchain@v1
-      with:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        id: toolchain
+        uses: actions-rs/toolchain@v1
+        with:
           toolchain: stable
           override: true
           components: rustfmt, clippy
-    - name: Restore build cache
-      uses: Swatinem/rust-cache@v2
-    - name: Build
-      run: cargo build --tests --verbose
-    - name: pre-commit
-      uses: pre-commit/action@v3.0.0
-    - uses: pre-commit-ci/lite-action@v1.0.0
-      if: always()
-    - name: Run tests
-      run: cargo test --verbose
+      - name: Restore build cache
+        uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --tests --verbose
+      # Install Node.js (npm) for Prettier in pre-commit
+      - name: Install Node.js (npm)
+        uses: actions/setup-node@v7
+        with:
+          node-version: latest
+      - name: pre-commit
+        uses: pre-commit/action@v3.0.0
+      - uses: pre-commit-ci/lite-action@v1.0.0
+        if: always()
+      - name: Run tests
+        run: cargo test --verbose
