@@ -21,4 +21,4 @@ document.addEventListener("keyup", (ev) => {
       window.location.href = link.getAttribute("href");
     }
   }
-})
+});
