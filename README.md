@@ -75,6 +75,18 @@ pre-commit install
 You can also use [prek](https://prek.j178.dev/) as a drop-in alternative to
 pre-commit. Just replace all `pre-commit` invocations by `prek`.
 
+One of the hooks runs [Prettier](https://prettier.io/) to format Markdown, JSON
+and Jinja template files. This step requires **npm**, thus, install it along
+with Node.js before running pre-commit.
+
+pre-commit/prek install Prettier into their own isolated environments, so there
+is no need to run `npm install` yourself, unless you want to run prettier
+manually:
+
+```sh
+npm run format
+```
+
 For testing your changes using the provided test suite, run all tests as
 follows:
 
