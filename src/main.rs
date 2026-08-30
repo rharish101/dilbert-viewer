@@ -3,29 +3,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! The main file for running the viewer app
-use std::env;
 use std::io::stdout;
-use std::str::FromStr;
 
 use clap::{Parser, Subcommand};
 use jiff::civil::Date;
 use portpicker::{is_free, pick_unused_port};
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::filter::{EnvFilter, LevelFilter};
+use tracing_subscriber::filter::EnvFilter;
 
 /// Default port when one isn't specified
 const PORT: u16 = 5000;
-
-/// Default log level
-const LOG_LEVEL: LevelFilter = LevelFilter::WARN;
-
-// Environment variables that are read
-/// Port on which to run the server
-const PORT_VAR: &str = "PORT";
-/// Log level
-const LOG_VAR: &str = "RUST_LOG";
-/// Database connection URL
-const DATABASE_URL_VAR: &str = "DATABASE_URL";
 
 /// Parse a date given in the `YYYY-MM-DD` format from the CLI.
 fn parse_date(date_str: &str) -> Result<Date, String> {
@@ -33,12 +20,15 @@ fn parse_date(date_str: &str) -> Result<Date, String> {
 }
 
 #[derive(Parser)]
-#[command(
-    version,
-    name = env!("CARGO_PKG_NAME"),
-    about = "Scrape and serve Dilbert comics from the Wayback Machine"
-)]
+#[command(version, about)]
 struct Cli {
+    #[arg(short, long, env = "DATABASE_URL")]
+    database_url: String,
+
+    // Use the `RUST_LOG` env var, like `env_logger`, but with a default.
+    #[arg(short, long, env = "RUST_LOG", default_value = "warn")]
+    log_level: String,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -47,7 +37,14 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Run the web viewer, serving comics from the database
-    Serve,
+    Serve {
+        #[arg(short, long, default_value = "localhost")]
+        host: String,
+
+        #[arg(short, long, env = "PORT", default_value_t = choose_port())]
+        port: u16,
+    },
+
     /// Scrape the Wayback Machine and write comics into the database
     Populate {
         /// Scrape only these dates (YYYY-MM-DD); the default is to scrape all dates
@@ -55,19 +52,18 @@ enum Command {
         date: Vec<Date>,
 
         /// Re-scrape and overwrite dates that already exist in the database
-        #[arg(long)]
+        #[arg(short = 'f', long)]
         overwrite: bool,
     },
 }
 
 /// Initialize the logger from the `RUST_LOG` environment variable, with a default.
-fn init_logger() -> WorkerGuard {
+fn init_logger(log_level: &str) -> WorkerGuard {
     // Log to stdout in a non-blocking way using a logging thread.
     let (writer, guard) = tracing_appender::non_blocking(stdout());
 
-    // Use the `RUST_LOG` env var, like `env_logger`, but with a default.
-    let builder = EnvFilter::builder().with_default_directive(LOG_LEVEL.into());
-    let filter = match builder.parse(env::var(LOG_VAR).unwrap_or_default()) {
+    let builder = EnvFilter::builder();
+    let filter = match builder.parse(log_level) {
         Ok(filter) => filter,
         Err(err) => {
             println!("Invalid log level: {err}");
@@ -85,12 +81,7 @@ fn init_logger() -> WorkerGuard {
 
 /// Choose the port from an environment variable, with a fallback.
 fn choose_port() -> u16 {
-    if let Some(port) = env::var(PORT_VAR)
-        .ok()
-        .and_then(|port| u16::from_str(&port).ok())
-    {
-        port
-    } else if is_free(PORT) {
+    if is_free(PORT) {
         PORT
     } else if let Some(port) = pick_unused_port() {
         port
@@ -103,20 +94,15 @@ fn choose_port() -> u16 {
 async fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
 
-    let db_url = env::var(DATABASE_URL_VAR).unwrap_or_else(|_| {
-        format!("Missing environment variable for the database URL: {DATABASE_URL_VAR}")
-    });
-
     // The non-blocking writer stays active as long as `_guard` is not dropped.
-    let _guard = init_logger();
+    let _guard = init_logger(&cli.log_level);
 
     match cli.command {
-        Command::Serve => {
-            let host = format!("0.0.0.0:{}", choose_port());
-            dilbert_viewer::serve(host, db_url, None).await
+        Command::Serve { host, port } => {
+            dilbert_viewer::serve(format!("{host}:{port}"), cli.database_url, None).await
         }
         Command::Populate { date, overwrite } => {
-            dilbert_viewer::populate(&db_url, date, overwrite, None, None).await
+            dilbert_viewer::populate(&cli.database_url, date, overwrite, None, None).await
         }
     }
 }
