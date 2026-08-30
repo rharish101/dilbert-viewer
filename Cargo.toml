@@ -23,7 +23,7 @@ actix-files = "0.7.0"
 actix-web = "4.9.0"
 askama = "0.16.0"
 chrono = { version = "0.4.19", features = ["serde", "std"], default-features = false }
-clap = { version = "4.6.6", features = ["derive"] }
+clap = { version = "4.6.6", features = ["derive", "env"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 html-escape = "0.2.9"
 indicatif = { version = "0.18.6", features = ["futures"] }
