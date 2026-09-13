@@ -9,7 +9,7 @@
   };
 
   outputs =
-    { nixpkgs, ... }:
+    { self, nixpkgs, ... }:
     let
       forAllSystems =
         function:
@@ -40,5 +40,7 @@
           };
         };
       });
+
+      nixosModules.default = (import ./module.nix) self.packages;
     };
 }
