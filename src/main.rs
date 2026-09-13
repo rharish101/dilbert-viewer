@@ -43,6 +43,9 @@ enum Command {
 
         #[arg(short, long, env = "PORT", default_value_t = choose_port())]
         port: u16,
+
+        #[arg(short, long, env = "STATIC_DIR", default_value = "static/")]
+        static_dir: String,
     },
 
     /// Scrape the Wayback Machine and write comics into the database
@@ -98,8 +101,13 @@ async fn main() -> std::io::Result<()> {
     let _guard = init_logger(&cli.log_level);
 
     match cli.command {
-        Command::Serve { host, port } => {
-            dilbert_viewer::serve(format!("{host}:{port}"), cli.database_url, None).await
+        Command::Serve {
+            host,
+            port,
+            static_dir,
+        } => {
+            dilbert_viewer::serve(format!("{host}:{port}"), cli.database_url, static_dir, None)
+                .await
         }
         Command::Populate { date, overwrite } => {
             dilbert_viewer::populate(&cli.database_url, date, overwrite, None, None).await

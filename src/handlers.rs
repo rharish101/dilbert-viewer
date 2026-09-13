@@ -5,7 +5,7 @@
 //! Route handlers for the server
 //!
 //! This is kept separate from `lib.rs`, since actix-web handlers are pub by default.
-use std::path::Path;
+use std::path::PathBuf;
 
 use actix_web::{HttpResponse, Responder, get, http::header::LOCATION, web};
 use jiff::{Span, civil::Date};
@@ -13,7 +13,7 @@ use rand::{RngExt, rng};
 use tracing::info;
 
 use crate::app::{Viewer, serve_404, serve_css, serve_js};
-use crate::constants::{FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT, STATIC_DIR};
+use crate::constants::{FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT};
 use crate::datetime::str_to_date;
 
 /// Serve the last comic.
@@ -64,16 +64,16 @@ async fn random_comic() -> impl Responder {
 
 /// Serve CSS after minification.
 #[get("/{path}.css")]
-async fn minify_css(path: web::Path<String>) -> impl Responder {
+async fn minify_css(static_dir: web::Data<PathBuf>, path: web::Path<String>) -> impl Responder {
     let stem = path.into_inner();
-    let css_path = Path::new(STATIC_DIR).join(stem + ".css");
+    let css_path = static_dir.join(stem + ".css");
     serve_css(&css_path).await
 }
 
 /// Serve JS after minification.
 #[get("/{path}.js")]
-async fn minify_js(path: web::Path<String>) -> impl Responder {
+async fn minify_js(static_dir: web::Data<PathBuf>, path: web::Path<String>) -> impl Responder {
     let stem = path.into_inner();
-    let js_path = Path::new(STATIC_DIR).join(stem + ".js");
+    let js_path = static_dir.join(stem + ".js");
     serve_js(&js_path).await
 }

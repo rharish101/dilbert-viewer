@@ -25,10 +25,10 @@ use actix_web::{
     web,
 };
 use jiff::civil::Date;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::app::{Viewer, serve_404};
-use crate::constants::{ARC_BASE_URL, CDX_URL, CSP, STATIC_DIR, STATIC_URL};
+use crate::constants::{ARC_BASE_URL, CDX_URL, CSP, STATIC_URL};
 use crate::db::{ensure_schema, init_db};
 use crate::handlers::{comic_page, last_comic, minify_css, minify_js, random_comic};
 use crate::logging::TracingWrapper;
@@ -77,8 +77,9 @@ async fn invalid_url(req: ServiceRequest) -> Result<ServiceResponse, WebError> {
 }
 
 /// Get the static file handling service.
-fn get_static_service() -> Files {
-    let mut service = Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
+fn get_static_service(static_dir: String) -> Files {
+    debug!("Using static directory: {static_dir}");
+    let mut service = Files::new(STATIC_URL, static_dir).default_handler(invalid_url);
     if let Ok(bytes) = serve_404(None).into_body().try_into_bytes() {
         if let Ok(html) = std::str::from_utf8(&bytes) {
             service = service.index_file(html);
@@ -96,8 +97,14 @@ fn get_static_service() -> Files {
 /// # Arguments
 /// * `host` - The host and port where to start the server
 /// * `db_url` - The URL to the database
+/// * `static_dir` - The location of static files
 /// * `workers` - The optional number of workers to use
-pub async fn serve(host: String, db_url: String, workers: Option<usize>) -> std::io::Result<()> {
+pub async fn serve(
+    host: String,
+    db_url: String,
+    static_dir: String,
+    workers: Option<usize>,
+) -> std::io::Result<()> {
     // Create all worker-shared (i.e. thread-safe) structs here
     let db = init_db(&db_url)
         .await
@@ -109,12 +116,13 @@ pub async fn serve(host: String, db_url: String, workers: Option<usize>) -> std:
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here
         let viewer = Viewer::new(db.clone());
-        let static_service = get_static_service();
-        Files::new(STATIC_URL, String::from(STATIC_DIR)).default_handler(invalid_url);
+        let static_service = get_static_service(static_dir.clone());
         let default_headers = DefaultHeaders::new().add(("Content-Security-Policy", CSP));
+        let static_path = std::path::PathBuf::from(&static_dir);
 
         App::new()
             .app_data(web::Data::new(viewer))
+            .app_data(web::Data::new(static_path))
             .wrap(Compress::default())
             .wrap(default_headers)
             .wrap(Logger::new(
