@@ -51,8 +51,6 @@ pub const ENTITY_PREFIX: &str = concat!(env!("CARGO_PKG_NAME"), "::entities::*")
 /// URL path for static files
 // This is set to root as it's easy to serve robots.txt by keeping it in static.
 pub const STATIC_URL: &str = "/";
-/// Location of static files
-pub const STATIC_DIR: &str = "static/";
 /// Content security policy
 pub const CSP: &str = "\
     default-src 'none';\
@@ -64,8 +62,6 @@ pub const CSP: &str = "\
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use std::path::Path;
 
     use actix_web::middleware::DefaultHeaders;
     use content_security_policy as csp;
@@ -94,15 +90,6 @@ mod tests {
         // This should error if the format is invalid.
         jiff::fmt::strtime::format(DISP_DATE_FMT, Date::new(2000, 1, 1).unwrap())
             .expect("DISP_DATE_FMT is not a valid format");
-    }
-
-    #[test]
-    /// Test whether the directory of static files exists.
-    fn test_if_static_dir_exists() {
-        assert!(
-            Path::new(STATIC_DIR).exists(),
-            "Static directory doesn't exist"
-        );
     }
 
     #[test]
