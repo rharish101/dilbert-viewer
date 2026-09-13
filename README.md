@@ -59,6 +59,15 @@ For example, to view all logs at or above the `DEBUG` level, run:
 RUST_LOG=debug DATABASE_URL=... cargo run ...
 ```
 
+To set the path to the static files directory (used for CSS, JS & others), set
+the `STATIC_DIR` environment variable to the path (either absolute or relative)
+to the static files directory. For example, to use the static files at
+`/usr/share/dilbert-viewer/static`, run:
+
+```sh
+STATIC_DIR=/usr/share/dilbert-viewer/static DATABASE_URL=... cargo run ...
+```
+
 ## Contributing
 
 [pre-commit](https://pre-commit.com/) is used for managing hooks that run before

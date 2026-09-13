@@ -106,7 +106,7 @@ async fn start_server(
     let host = format!("{HOST}:{port}");
 
     // Start the server on a single thread.
-    let handle = spawn(serve(host, db_url, Some(1)));
+    let handle = spawn(serve(host, db_url, String::from("static/"), Some(1)));
     (handle, get_http_client(), db)
 }
 
