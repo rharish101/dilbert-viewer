@@ -11,6 +11,7 @@ use jiff::{Span, civil::Date};
 #[cfg(test)]
 use mockall::automock;
 use reqwest::{Client, StatusCode};
+use reqwest::{Error as ReqwestError, Response};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -62,6 +63,34 @@ mod inner {
         std::str::from_utf8(bytes).map_err(|_| ScraperError::Scrape(format!("{what} is not UTF-8")))
     }
 
+    async fn get_cdx_timestamp(
+        resp_result: Result<Response, ReqwestError>,
+        date: &Date,
+    ) -> ScraperResult<String> {
+        let resp = resp_result?;
+        let status = resp.status();
+
+        if status != StatusCode::OK {
+            return Err(ScraperError::Scrape(format!(
+                "Unexpected CDX response status: {status}"
+            )));
+        }
+
+        let bytes = resp.bytes().await?;
+        debug!("Got CDX API response body of length: {}B", bytes.len());
+
+        let timestamp = utf8(&bytes, "CDX API response")?.trim();
+        if timestamp.is_empty() {
+            // The CDX API returns an empty body when there's no snapshot.
+            return Err(ScraperError::NotFound(format!(
+                "No Wayback Machine snapshot for {date}"
+            )));
+        }
+
+        info!("Found timestamp {timestamp} for comic on date: {date}");
+        Ok(String::from(timestamp))
+    }
+
     #[cfg_attr(test, automock)]
     impl InnerComicScraper {
         /// Initialize a comics scraper.
@@ -86,24 +115,14 @@ mod inner {
             let cdx_url = self.cdx_url.replace("{date}", &date_str);
 
             debug!("Requesting CDX API: {cdx_url}");
-            let resp = self.http_client.get(cdx_url).send().await?;
-            let status = resp.status();
-
-            let timestamp = if status == StatusCode::OK {
-                let bytes = resp.bytes().await?;
-                debug!("Got CDX API response body of length: {}B", bytes.len());
-                let timestamp = utf8(&bytes, "CDX API response")?.trim();
-                if timestamp.is_empty() {
-                    // The CDX API returns an empty body when there's no snapshot.
-                    return Err(ScraperError::NotFound(format!(
-                        "No Wayback Machine snapshot for {date}"
-                    )));
+            let resp_result = self.http_client.get(cdx_url).send().await;
+            let timestamp = match get_cdx_timestamp(resp_result, date).await {
+                Ok(timestamp) => timestamp,
+                Err(ScraperError::NotFound(msg)) => return Err(ScraperError::NotFound(msg)),
+                Err(err) => {
+                    warn!("Got CDX API error: {err}");
+                    String::from(CDX_TIMESTAMP_FALLBACK)
                 }
-                info!("Found timestamp {timestamp} for comic on date: {date}");
-                String::from(timestamp)
-            } else {
-                error!("Unexpected CDX response status: {status}");
-                String::from(CDX_TIMESTAMP_FALLBACK)
             };
 
             Ok(self
@@ -363,7 +382,7 @@ mod comic {
                         Ok(ScrapeOutcome::Empty) => summary.empty += 1,
                         Ok(ScrapeOutcome::Populated) => summary.populated += 1,
                         Err(err) => {
-                            warn!("Failed to populate {date}: {err}");
+                            error!("Failed to populate {date}: {err}");
                             summary.failed += 1;
                         }
                     }
