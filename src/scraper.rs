@@ -216,8 +216,6 @@ mod comic {
     /// Outcome of a single `scrape_comic_data` call
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(super) enum ScrapeOutcome {
-        /// The date was already in the database and wasn't overwritten
-        Skipped,
         /// The date had no comic in the source
         Empty,
         /// A comic was scraped and written to the database
@@ -275,6 +273,24 @@ mod comic {
             }
         }
 
+        /// Check whether to scrape this date or not.
+        ///
+        /// # Arguments
+        /// * `date` - The date of the requested comic
+        /// * `overwrite` - Whether to overwrite data for existing dates
+        #[instrument(skip(self))]
+        pub(super) async fn filter_date(&self, date: Date, overwrite: bool) -> bool {
+            let existing = get_comic(&self.db, date)
+                .await
+                .inspect_err(|err| warn!("Couldn't check database for {date}: {err}"))
+                .unwrap_or(None);
+            if !overwrite && existing.is_some() {
+                debug!("Skipping {date}; already in database");
+                return false;
+            }
+            return true;
+        }
+
         /// Scrape the comic data for the given date from the source and save it to the database.
         ///
         /// # Arguments
@@ -286,10 +302,6 @@ mod comic {
             date: &Date,
             overwrite: bool,
         ) -> ScraperResult<ScrapeOutcome> {
-            if !overwrite && get_comic(&self.db, *date).await?.is_some() {
-                debug!("Skipping {date}; already in database");
-                return Ok(ScrapeOutcome::Skipped);
-            }
             match self.inner.scrape_data(date).await {
                 Ok(comic_data) => {
                     insert_comic(&self.db, *date, comic_data, overwrite).await?;
@@ -335,8 +347,11 @@ mod comic {
             } else {
                 ProgressBar::new(total as u64)
             };
-            tokio_stream::StreamExt::throttle(
-                progress_bar.wrap_stream(iter(dates)),
+
+            let mut summary = tokio_stream::StreamExt::throttle(
+                progress_bar
+                    .wrap_stream(iter(dates))
+                    .filter(|date| self.filter_date(*date, overwrite)),
                 Duration::from_secs(SCRAPE_DELAY),
             )
             .map(|date| async move { (date, self.scrape_comic_data(&date, overwrite).await) })
@@ -345,7 +360,6 @@ mod comic {
                 PopulateSummary::default(),
                 |mut summary, (date, outcome)| async move {
                     match outcome {
-                        Ok(ScrapeOutcome::Skipped) => summary.skipped += 1,
                         Ok(ScrapeOutcome::Empty) => summary.empty += 1,
                         Ok(ScrapeOutcome::Populated) => summary.populated += 1,
                         Err(err) => {
@@ -353,11 +367,16 @@ mod comic {
                             summary.failed += 1;
                         }
                     }
-                    summary.total += 1;
                     summary
                 },
             )
-            .await
+            .await;
+
+            // Skipped dates never reach the reducer, so derive `skipped` by
+            // subtraction; every other date yields exactly one outcome.
+            summary.total = total as u32;
+            summary.skipped = summary.total - summary.empty - summary.populated - summary.failed;
+            summary
         }
     }
 }
@@ -382,13 +401,35 @@ mod tests {
 
     /// The outcome of the mocked `InnerComicScraper::scrape_data`.
     #[derive(Clone, Copy)]
-    enum MockScrapeOutcome {
+    enum MockOutcome {
         /// Scraping succeeded.
         Ok,
         /// Scraping failed with `AppError::NotFound` (no comic for the date).
         NotFound,
         /// Scraping failed with some other error.
         OtherError,
+    }
+
+    /// The comic data already present in the database.
+    fn existing_comic() -> ComicData {
+        ComicData {
+            title: "Existing".into(),
+            img_url: "https://example.com/existing.png".into(),
+            img_width: 1,
+            img_height: 1,
+            permalink: "https://dilbert.com/strip/2020-01-01".into(),
+        }
+    }
+
+    /// The comic data that the mock scrape "scrapes" for the populated date.
+    fn scraped_comic() -> ComicData {
+        ComicData {
+            title: String::new(),
+            img_url: "https://example.com/scraped.png".into(),
+            img_width: 900,
+            img_height: 266,
+            permalink: "https://dilbert.com/strip/2000-01-01".into(),
+        }
     }
 
     #[test_case((2000, 1, 1), Some("20200101"); "valid timestamp")]
@@ -554,16 +595,58 @@ mod tests {
         }
     }
 
-    #[test_case(false, true, MockScrapeOutcome::Ok; "no overwrite, comic already in database, scrape skipped")]
-    #[test_case(false, false, MockScrapeOutcome::Ok; "no overwrite, empty database, scrape succeeds")]
-    #[test_case(false, false, MockScrapeOutcome::NotFound; "no overwrite, empty database, scrape not found")]
-    #[test_case(false, false, MockScrapeOutcome::OtherError; "no overwrite, empty database, scrape fails")]
-    #[test_case(true, true, MockScrapeOutcome::Ok; "overwrite existing comic")]
-    #[test_case(true, true, MockScrapeOutcome::NotFound; "overwrite, scrape not found")]
-    #[test_case(true, true, MockScrapeOutcome::OtherError; "overwrite, scrape fails")]
-    #[test_case(true, false, MockScrapeOutcome::Ok; "overwrite, empty database, scrape succeeds")]
-    #[test_case(true, false, MockScrapeOutcome::NotFound; "overwrite, empty database, scrape not found")]
-    #[test_case(true, false, MockScrapeOutcome::OtherError; "overwrite, empty database, scrape fails")]
+    #[test_case(false, MockOutcome::Ok; "no overwrite, comic exists")]
+    #[test_case(false, MockOutcome::NotFound; "no overwrite, comic not found")]
+    #[test_case(false, MockOutcome::OtherError; "no overwrite, comic fetch fails")]
+    #[test_case(true, MockOutcome::Ok; "overwrite, comic exists")]
+    #[test_case(true, MockOutcome::NotFound; "overwrite, comic not found")]
+    #[test_case(true, MockOutcome::OtherError; "overwrite, comic fetch fails")]
+    #[actix_web::test]
+    /// Test `filter_date` across all combinations of overwrite and existing
+    /// database state.
+    ///
+    /// # Arguments
+    /// * `overwrite` - Whether to overwrite data for existing dates
+    /// * `outcome` - The outcome of the comic fetch from the database
+    async fn test_filter_date(overwrite: bool, outcome: MockOutcome) {
+        let date = Date::new(2000, 1, 1).unwrap();
+
+        // Set up the in-memory database, pre-populating it if the test starts with a comic.
+        let db = test_db().await;
+        match outcome {
+            MockOutcome::Ok => insert_comic(&db, date, existing_comic(), false)
+                .await
+                .expect("Couldn't insert existing comic into DB"),
+            MockOutcome::NotFound => (),
+            // Ensure the DB can't be queried by closing the connection pool.
+            MockOutcome::OtherError => db
+                .close_by_ref()
+                .await
+                .expect("Failed to close the database connection"),
+        };
+
+        let scraper = ComicScraper {
+            inner: MockInnerComicScraper::default(),
+            db,
+        };
+
+        let expected = overwrite || !matches!(outcome, MockOutcome::Ok);
+        let actual = scraper.filter_date(date, overwrite).await;
+        assert_eq!(actual, expected, "filter_date returned the wrong outcome");
+    }
+
+    #[test_case(false, true, MockOutcome::Ok; "no overwrite, comic already in database, scrape skipped")]
+    #[test_case(false, true, MockOutcome::NotFound; "no overwrite, comic already in database, scrape not found")]
+    #[test_case(false, true, MockOutcome::OtherError; "no overwrite, comic already in database, scrape fails")]
+    #[test_case(false, false, MockOutcome::Ok; "no overwrite, empty database, scrape succeeds")]
+    #[test_case(false, false, MockOutcome::NotFound; "no overwrite, empty database, scrape not found")]
+    #[test_case(false, false, MockOutcome::OtherError; "no overwrite, empty database, scrape fails")]
+    #[test_case(true, true, MockOutcome::Ok; "overwrite existing comic")]
+    #[test_case(true, true, MockOutcome::NotFound; "overwrite, scrape not found")]
+    #[test_case(true, true, MockOutcome::OtherError; "overwrite, scrape fails")]
+    #[test_case(true, false, MockOutcome::Ok; "overwrite, empty database, scrape succeeds")]
+    #[test_case(true, false, MockOutcome::NotFound; "overwrite, empty database, scrape not found")]
+    #[test_case(true, false, MockOutcome::OtherError; "overwrite, empty database, scrape fails")]
     #[actix_web::test]
     /// Test `scrape_comic_data` across all combinations of overwrite, existing
     /// database state and scrape outcome.
@@ -572,23 +655,11 @@ mod tests {
     /// * `overwrite` - Whether to overwrite data for existing dates
     /// * `existing` - The comic data already present in the database, if any
     /// * `outcome` - The outcome of the mocked scrape
-    async fn test_scrape_comic_data(overwrite: bool, existing: bool, outcome: MockScrapeOutcome) {
+    async fn test_scrape_comic_data(overwrite: bool, existing: bool, outcome: MockOutcome) {
         let date = Date::new(2000, 1, 1).unwrap();
 
-        let existing_data = ComicData {
-            title: "Existing".into(),
-            img_url: "https://example.com/existing.png".into(),
-            img_width: 580,
-            img_height: 140,
-            permalink: "https://dilbert.com/strip/2000-01-01".into(),
-        };
-        let scraped_data = ComicData {
-            title: "Scraped".into(),
-            img_url: "https://example.com/scraped.png".into(),
-            img_width: 580,
-            img_height: 140,
-            permalink: "https://dilbert.com/strip/2000-01-01".into(),
-        };
+        let existing_data = existing_comic();
+        let scraped_data = scraped_comic();
 
         // Set up the in-memory database, pre-populating it if the test starts with a comic.
         let db = test_db().await;
@@ -598,13 +669,11 @@ mod tests {
                 .expect("Couldn't insert existing comic into DB");
         }
 
-        // Scraping is skipped only if the comic is already in the database and overwrite is off.
-        let scrape_calls = if overwrite || !existing { 1 } else { 0 };
         let mut mock_scraper = MockInnerComicScraper::default();
 
         mock_scraper.expect_get_archive_link().return_once({
             move |_| {
-                if let MockScrapeOutcome::OtherError = outcome {
+                if let MockOutcome::OtherError = outcome {
                     Err(ScraperError::Scrape("Manual error".into()))
                 } else {
                     Ok(String::new())
@@ -616,11 +685,12 @@ mod tests {
         mock_scraper
             .expect_scrape_data()
             .return_once(move |_| match outcome {
-                MockScrapeOutcome::Ok => Ok(scraped_data_clone),
-                MockScrapeOutcome::NotFound => Err(ScraperError::NotFound("Missing comic".into())),
-                MockScrapeOutcome::OtherError => Err(ScraperError::Scrape("Manual error".into())),
+                MockOutcome::Ok => Ok(scraped_data_clone),
+                MockOutcome::NotFound => Err(ScraperError::NotFound("Missing comic".into())),
+                MockOutcome::OtherError => Err(ScraperError::Scrape("Manual error".into())),
             })
-            .times(scrape_calls);
+            // Scraping is always attempted; `filter_date` now handles skipping.
+            .times(1);
 
         let scraper = ComicScraper {
             inner: mock_scraper,
@@ -628,10 +698,9 @@ mod tests {
         };
 
         let expected = match outcome {
-            MockScrapeOutcome::OtherError => Err("Scraping error: Manual error".to_string()),
-            MockScrapeOutcome::NotFound => Ok(ScrapeOutcome::Empty),
-            MockScrapeOutcome::Ok if overwrite || !existing => Ok(ScrapeOutcome::Populated),
-            MockScrapeOutcome::Ok => Ok(ScrapeOutcome::Skipped),
+            MockOutcome::OtherError => Err("Scraping error: Manual error".to_string()),
+            MockOutcome::NotFound => Ok(ScrapeOutcome::Empty),
+            MockOutcome::Ok => Ok(ScrapeOutcome::Populated),
         };
         let actual = match scraper.scrape_comic_data(&date, overwrite).await {
             Ok(outcome) => Ok(outcome),
@@ -642,9 +711,10 @@ mod tests {
             "scrape_comic_data returned the wrong outcome"
         );
 
-        // The scraped data lands in the database only if scraping was attempted and succeeded.
+        // The scraped data lands in the database only if scraping succeeded and
+        // either the database was empty or overwrite was on.
         let expected = match outcome {
-            MockScrapeOutcome::Ok if scrape_calls == 1 => Some(scraped_data),
+            MockOutcome::Ok if overwrite || !existing => Some(scraped_data),
             _ => {
                 if existing {
                     Some(existing_data)
@@ -670,17 +740,6 @@ mod tests {
             Date::new(2010, 1, 4).unwrap(),
             Date::new(2015, 6, 1).unwrap(),
         )
-    }
-
-    /// The comic data that the mock scrape "scrapes" for the populated date.
-    fn scraped_comic() -> ComicData {
-        ComicData {
-            title: String::new(),
-            img_url: "https://example.com/scraped.png".into(),
-            img_width: 900,
-            img_height: 266,
-            permalink: "https://dilbert.com/strip/2000-01-01".into(),
-        }
     }
 
     /// A scraper with per-date scrape outcomes: the first date succeeds, the
@@ -718,14 +777,8 @@ mod tests {
         // Set up the in-memory database, pre-populating the date that should
         // be skipped.
         let db = test_db().await;
-        let original = ComicData {
-            title: "Original".into(),
-            img_url: "https://example.com/original.png".into(),
-            img_width: 1,
-            img_height: 1,
-            permalink: "https://dilbert.com/strip/2020-01-01".into(),
-        };
-        insert_comic(&db, skipped_date, original.clone(), false)
+        let existing = existing_comic();
+        insert_comic(&db, skipped_date, existing.clone(), false)
             .await
             .expect("Couldn't pre-populate test comic");
 
@@ -753,7 +806,7 @@ mod tests {
         );
 
         // The scraped comic is stored only for the populated date; the
-        // skipped date keeps its original data; the empty and failed dates
+        // skipped date keeps its existing data; the empty and failed dates
         // have no rows.
         assert_eq!(
             get_comic(&db, populated_date).await.unwrap(),
@@ -762,7 +815,7 @@ mod tests {
         );
         assert_eq!(
             get_comic(&db, skipped_date).await.unwrap(),
-            Some(original),
+            Some(existing),
             "Skipped date was modified"
         );
         assert_eq!(
