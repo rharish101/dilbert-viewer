@@ -25,7 +25,7 @@ use actix_web::{
     web,
 };
 use jiff::civil::Date;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::app::{Viewer, serve_404};
 use crate::constants::{ARC_BASE_URL, CDX_URL, CSP, STATIC_URL};
@@ -110,7 +110,7 @@ pub async fn serve(
         .await
         .expect("Couldn't connect to the database");
     if let Err(err) = ensure_schema(&db).await {
-        error!("Couldn't sync the database schema: {err}.");
+        warn!("Couldn't sync the database schema: {err}.");
     };
 
     let mut server = HttpServer::new(move || {
