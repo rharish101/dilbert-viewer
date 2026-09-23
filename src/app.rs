@@ -6,13 +6,16 @@
 use std::cmp::{max, min};
 use std::path::Path;
 
-use actix_web::{HttpResponse, http::header::ContentType};
+use actix_web::{
+    HttpResponse,
+    http::header::{CACHE_CONTROL, ContentType},
+};
 use askama::Template;
 use jiff::{Span, civil::Date};
 use sea_orm::DatabaseConnection;
 use tracing::{debug, error};
 
-use crate::constants::{DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT};
+use crate::constants::{CACHE_CONTROL_VALUE, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT};
 use crate::datetime::str_to_date;
 use crate::db::get_comic;
 use crate::errors::{MinificationError, ViewerError, ViewerResult};
@@ -108,6 +111,7 @@ fn serve_template(date: &Date, comic_data: &ComicData) -> ViewerResult<HttpRespo
 
     Ok(HttpResponse::Ok()
         .content_type(ContentType::html())
+        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE))
         .body(minify_html(template.render()?)?))
 }
 
@@ -137,6 +141,7 @@ async fn serve_css_raw(path: &Path) -> ViewerResult<HttpResponse> {
 
     Ok(HttpResponse::Ok()
         .content_type("text/css;charset=utf-8")
+        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE))
         .body(minified))
 }
 
@@ -171,6 +176,7 @@ async fn serve_js_raw(path: &Path) -> ViewerResult<HttpResponse> {
 
     Ok(HttpResponse::Ok()
         .content_type("text/javascript;charset=utf-8")
+        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE))
         .body(minified))
 }
 
@@ -197,6 +203,7 @@ fn serve_404_raw(date: Option<&Date>) -> ViewerResult<HttpResponse> {
     debug!("Rendering 404 template: {template:?}");
     Ok(HttpResponse::NotFound()
         .content_type(ContentType::html())
+        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE))
         .body(minify_html(template.render()?)?))
 }
 
@@ -255,7 +262,7 @@ mod tests {
         body::MessageBody,
         http::{
             StatusCode,
-            header::{CONTENT_TYPE, TryIntoHeaderValue},
+            header::{CACHE_CONTROL, CONTENT_TYPE, TryIntoHeaderValue},
         },
     };
     use test_case::test_case;
@@ -322,6 +329,11 @@ mod tests {
         let resp = serve_template(&comic_date, &comic_data).expect("Error generating comic page");
 
         assert_eq!(resp.status(), StatusCode::OK, "Response is not status OK");
+        assert_eq!(
+            resp.headers().get(CACHE_CONTROL),
+            Some(&CACHE_CONTROL_VALUE.try_into_value().unwrap()),
+            "Comic page is missing the expected Cache-Control header"
+        );
         test_html_response(resp);
     }
 
@@ -341,6 +353,11 @@ mod tests {
             resp.status(),
             StatusCode::NOT_FOUND,
             "Response is not status NOT FOUND"
+        );
+        assert_eq!(
+            resp.headers().get(CACHE_CONTROL),
+            Some(&CACHE_CONTROL_VALUE.try_into_value().unwrap()),
+            "404 page is missing the expected Cache-Control header"
         );
         test_html_response(resp);
     }
@@ -362,6 +379,11 @@ mod tests {
             resp.status(),
             StatusCode::INTERNAL_SERVER_ERROR,
             "Response is not status INTERNAL SERVER ERROR"
+        );
+        assert_eq!(
+            resp.headers().get(CACHE_CONTROL),
+            None,
+            "Error page has unexpected Cache-Control header"
         );
         test_html_response(resp);
     }
@@ -407,6 +429,13 @@ mod tests {
         assert!(
             content_type.contains("text/css"),
             "Response content type is not CSS"
+        );
+
+        // Check the "Cache-Control" header.
+        assert_eq!(
+            resp.headers().get(CACHE_CONTROL),
+            Some(&CACHE_CONTROL_VALUE.try_into_value().unwrap()),
+            "Response has unexpected Cache-Control header"
         );
 
         // Check if response body is valid UTF-8 and the CSS is parsable.

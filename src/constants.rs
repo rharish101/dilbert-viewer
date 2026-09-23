@@ -46,18 +46,25 @@ pub const DB_TIMEOUT: u64 = 5;
 pub const ENTITY_PREFIX: &str = concat!(env!("CARGO_PKG_NAME"), "::entities::*");
 
 // ==================================================
-// Miscellaneous
+// HTTP response header values
 // ==================================================
-/// URL path for static files
-// This is set to root as it's easy to serve robots.txt by keeping it in static.
-pub const STATIC_URL: &str = "/";
-/// Content security policy
-pub const CSP: &str = "\
+/// "Content-Security-Policy" header value
+pub const CSP_VALUE: &str = "\
     default-src 'none';\
     img-src assets.amuniversal.com dilbert.com web.archive.org;\
     style-src 'self' cdn.jsdelivr.net;\
     script-src 'self';\
     frame-ancestors 'none'";
+/// "Cache-Control" header value
+// Comic pages and assets rarely change within a day, so 24 * 60 * 60 = 86400 s is safe.
+pub const CACHE_CONTROL_VALUE: &str = "public, max-age=86400";
+
+// ==================================================
+// Miscellaneous
+// ==================================================
+/// URL path for static files
+// This is set to root as it's easy to serve robots.txt by keeping it in static.
+pub const STATIC_URL: &str = "/";
 
 #[cfg(test)]
 mod tests {
@@ -66,6 +73,7 @@ mod tests {
     use actix_web::middleware::DefaultHeaders;
     use content_security_policy as csp;
     use jiff::civil::Date;
+    use test_case::test_case;
 
     #[test]
     /// Test whether the first comic date is in the expected format.
@@ -92,16 +100,25 @@ mod tests {
             .expect("DISP_DATE_FMT is not a valid format");
     }
 
+    #[test_case("Content-Security-Policy", CSP_VALUE; "Content-Security-Policy")]
+    #[test_case("Cache-Control", CACHE_CONTROL_VALUE; "Cache-Control")]
+    /// Test whether a header's format is valid (*syntactically*, not semantically).
+    ///
+    /// # Arguments
+    /// * `name` - The header name
+    /// * `value` - The header value
+    fn test_header_format(name: &str, value: &str) {
+        // This panics on invalid formats.
+        DefaultHeaders::new().add((name, value));
+    }
+
     #[test]
     /// Test whether the content security policy (CSP) is a valid header value.
     ///
     /// Note that this doesn't check if the CSP follows the CSP format.
-    fn test_content_security_policy_header_format() {
-        // This panics if the *header* format is invalid (not CSP format).
-        DefaultHeaders::new().add(("Content-Security-Policy", CSP));
-
+    fn test_content_security_policy_header_value() {
         let policy = csp::Policy::parse(
-            CSP,
+            CSP_VALUE,
             csp::PolicySource::Header,
             csp::PolicyDisposition::Enforce,
         );
