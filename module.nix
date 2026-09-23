@@ -55,6 +55,9 @@ in
 
         # Hardening
         CapabilityBoundingSet = "";
+        DynamicUser = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
         NoNewPrivileges = true;
         PrivateDevices = true;
         PrivateMounts = true;
@@ -77,6 +80,7 @@ in
         RestrictNamespaces = true;
         RestrictRealtime = true;
         RestrictSUIDSGID = true;
+        UMask = "0077";
       };
     };
   };
