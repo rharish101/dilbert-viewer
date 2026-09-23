@@ -22,10 +22,12 @@ fn parse_date(date_str: &str) -> Result<Date, String> {
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    #[arg(short, long, env = "DATABASE_URL")]
+    /// Comics database URL with credentials
+    #[arg(short, long, env)]
     database_url: String,
 
     // Use the `RUST_LOG` env var, like `env_logger`, but with a default.
+    /// Log level for all logs
     #[arg(short, long, env = "RUST_LOG", default_value = "warn")]
     log_level: String,
 
@@ -38,13 +40,16 @@ struct Cli {
 enum Command {
     /// Run the web viewer, serving comics from the database
     Serve {
+        /// Host that the viewer will listen on
         #[arg(short, long, default_value = "localhost")]
         host: String,
 
-        #[arg(short, long, env = "PORT", default_value_t = choose_port())]
+        /// Port that the viewer will listen on
+        #[arg(short, long, env, default_value_t = choose_port())]
         port: u16,
 
-        #[arg(short, long, env = "STATIC_DIR", default_value = "static/")]
+        /// Path to the directory containing the viewer's static files
+        #[arg(short, long, env, default_value = "static/")]
         static_dir: String,
     },
 
