@@ -17,13 +17,10 @@ repos:
     hooks:
       - id: prettier
         name: prettier
-        entry: prettier
+        entry: node_modules/.bin/prettier
         args: [--write, --ignore-unknown]
-        language: node
+        language: system
         types: [text]
-        additional_dependencies:
-          - prettier@3.9.6
-          - prettier-plugin-jinja-template@2.2.0
   - repo: https://github.com/fsfe/reuse-tool
     rev: v6.2.0
     hooks:
