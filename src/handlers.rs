@@ -27,7 +27,7 @@ async fn last_comic(viewer: web::Data<Viewer>) -> impl Responder {
 }
 
 /// Serve the comic requested in the given URL.
-#[get("/{year}-{month}-{day}")]
+#[get("/{year:\\d{4}}-{month:\\d{2}}-{day:\\d{2}}")]
 async fn comic_page(viewer: web::Data<Viewer>, path: web::Path<(i16, u8, u8)>) -> impl Responder {
     let (year, month, day) = path.into_inner();
 
