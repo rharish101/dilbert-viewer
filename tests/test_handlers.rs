@@ -2,16 +2,20 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::io;
 use std::time::Duration;
 
 use actix_web::rt::spawn;
 use dilbert_viewer::{serve, test};
 use jiff::civil::Date;
 use portpicker::pick_unused_port;
-use reqwest::header::{CONTENT_TYPE, LOCATION};
+use regex::Regex;
+use reqwest::header::{
+    CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, LOCATION, REFERRER_POLICY,
+    X_CONTENT_TYPE_OPTIONS,
+};
 use reqwest::{Client, Response, StatusCode, redirect::Policy};
 use sea_orm::DatabaseConnection;
-use std::io;
 use test_case::test_case;
 use tokio::task::JoinHandle;
 
@@ -38,23 +42,32 @@ fn get_http_client() -> Client {
         .expect("Couldn't build the HTTP client")
 }
 
-/// Test if an HTTP response is a valid HTML page.
+/// Test whether a response has the expected header.
 ///
 /// # Arguments
 /// * `resp` - The HTTP response
-/// * `expected` - The expected Content-Type header
-fn test_content_type(resp: &Response, expected: &str) {
-    // Check the "Content-Type" header.
-    let content_type = resp
+/// * `header` - The expected header name
+/// * `expected_regex` - The expected header value regex
+fn test_response_header(resp: &Response, header: &HeaderName, expected_regex: &str) {
+    let value = resp
         .headers()
-        .get(CONTENT_TYPE)
-        .expect("Missing Content-Type header")
+        .get(header)
+        .unwrap_or_else(|| panic!("Missing {header} header"))
         .to_str()
-        .expect("Content-Type header is not ASCII");
-    assert!(
-        content_type.contains(expected),
-        "Wrong response content type"
-    );
+        .unwrap_or_else(|err| panic!("{header} header is not ASCII: {err}"));
+    let re = Regex::new(expected_regex)
+        .unwrap_or_else(|err| panic!("Invalid regex for {header} header: {err}"));
+    assert!(re.is_match(value), "Wrong {header} header in response");
+}
+
+/// Test whether a response has the expected default headers.
+///
+/// # Arguments
+/// * `resp` - The HTTP response
+fn test_default_headers(resp: &Response) {
+    test_response_header(resp, &CONTENT_SECURITY_POLICY, "default-src 'none'");
+    test_response_header(resp, &X_CONTENT_TYPE_OPTIONS, "^nosniff$");
+    test_response_header(resp, &REFERRER_POLICY, ".");
 }
 
 /// Create a named shared-cache in-memory SQLite database, sync the schema, and populate it
@@ -141,7 +154,8 @@ async fn test_last_comic() {
     handle.abort();
 
     assert_eq!(resp.status(), StatusCode::OK, "Response status is not OK");
-    test_content_type(&resp, "text/html");
+    test_response_header(&resp, &CONTENT_TYPE, "text/html");
+    test_default_headers(&resp);
 }
 
 #[test_case(2000, 1, 1, true; "existing comic")]
@@ -178,8 +192,9 @@ async fn test_comic(year: i16, month: u8, day: u8, has_comic: bool) {
     handle.abort();
 
     assert_eq!(resp.status(), expected_status, "Unexpected response status");
+    test_default_headers(&resp);
     if expected_status == StatusCode::OK {
-        test_content_type(&resp, "text/html");
+        test_response_header(&resp, &CONTENT_TYPE, "text/html");
     }
 }
 
@@ -214,6 +229,7 @@ async fn test_random_comic() {
             random_date >= first_comic && random_date <= last_comic,
             "Redirected to invalid date"
         );
+        test_default_headers(&resp);
     }
 
     // Close the server.
@@ -241,5 +257,6 @@ async fn test_static(path: &str, status_code: StatusCode, content_type: &str) {
     handle.abort();
 
     assert_eq!(resp.status(), status_code, "Unexpected response status");
-    test_content_type(&resp, content_type);
+    test_response_header(&resp, &CONTENT_TYPE, content_type);
+    test_default_headers(&resp);
 }
