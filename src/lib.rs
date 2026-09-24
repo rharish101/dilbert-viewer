@@ -28,7 +28,7 @@ use jiff::civil::Date;
 use tracing::{debug, error, info, warn};
 
 use crate::app::{Viewer, serve_404};
-use crate::constants::{ARC_BASE_URL, CDX_URL, CSP_VALUE, STATIC_URL};
+use crate::constants::{ARC_BASE_URL, CDX_URL, CSP_VALUE, REFERRER_POLICY_VALUE, STATIC_URL};
 use crate::db::{ensure_schema, init_db};
 use crate::handlers::{comic_page, last_comic, minify_css, minify_js, random_comic};
 use crate::logging::TracingWrapper;
@@ -117,7 +117,10 @@ pub async fn serve(
         // Create all worker-specific (i.e. thread-unsafe) structs here
         let viewer = Viewer::new(db.clone());
         let static_service = get_static_service(static_dir.clone());
-        let default_headers = DefaultHeaders::new().add(("Content-Security-Policy", CSP_VALUE));
+        let default_headers = DefaultHeaders::new()
+            .add(("Content-Security-Policy", CSP_VALUE))
+            .add(("X-Content-Type-Options", "nosniff"))
+            .add(("Referrer-Policy", REFERRER_POLICY_VALUE));
         let static_path = std::path::PathBuf::from(&static_dir);
 
         App::new()

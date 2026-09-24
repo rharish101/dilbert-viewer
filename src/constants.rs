@@ -58,6 +58,9 @@ pub const CSP_VALUE: &str = "\
 /// "Cache-Control" header value
 // Comic pages and assets rarely change within a day, so 24 * 60 * 60 = 86400 s is safe.
 pub const CACHE_CONTROL_VALUE: &str = "public, max-age=86400";
+/// "Referrer-Policy" header value
+// The viewed comic's URL is never sent to external sites, but internal navigation is still logged.
+pub const REFERRER_POLICY_VALUE: &str = "same-origin";
 
 // ==================================================
 // Miscellaneous
@@ -102,6 +105,7 @@ mod tests {
 
     #[test_case("Content-Security-Policy", CSP_VALUE; "Content-Security-Policy")]
     #[test_case("Cache-Control", CACHE_CONTROL_VALUE; "Cache-Control")]
+    #[test_case("Referrer-Policy", REFERRER_POLICY_VALUE; "Referrer-Policy")]
     /// Test whether a header's format is valid (*syntactically*, not semantically).
     ///
     /// # Arguments
