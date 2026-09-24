@@ -62,18 +62,46 @@ async fn random_comic() -> impl Responder {
         .finish()
 }
 
-/// Serve CSS after minification.
-#[get("/{path}.css")]
-async fn minify_css(static_dir: web::Data<PathBuf>, path: web::Path<String>) -> impl Responder {
-    let stem = path.into_inner();
+/// Serve CSS after minification, with the crate version in the URL for cache-busting.
+///
+/// The version in the URL must match the crate version; anything else is a 404, so that old
+/// versions of the page are never served the contents of a new version.
+#[get("/{stem}.{version:\\d+\\.\\d+\\.\\d+}.css")]
+async fn minify_css(
+    static_dir: web::Data<PathBuf>,
+    path: web::Path<(String, String)>,
+) -> impl Responder {
+    let (stem, version) = path.into_inner();
+    if version != env!("CARGO_PKG_VERSION") {
+        info!("Stale CSS version requested: {version}");
+        return serve_404(None);
+    }
     let css_path = static_dir.join(stem + ".css");
     serve_css(&css_path).await
 }
 
-/// Serve JS after minification.
-#[get("/{path}.js")]
-async fn minify_js(static_dir: web::Data<PathBuf>, path: web::Path<String>) -> impl Responder {
-    let stem = path.into_inner();
+/// Serve JS after minification, with the crate version in the URL for cache-busting.
+///
+/// The version in the URL must match the crate version; anything else is a 404, so that old
+/// versions of the page are never served the contents of a new version.
+#[get("/{stem}.{version:\\d+\\.\\d+\\.\\d+}.js")]
+async fn minify_js(
+    static_dir: web::Data<PathBuf>,
+    path: web::Path<(String, String)>,
+) -> impl Responder {
+    let (stem, version) = path.into_inner();
+    if version != env!("CARGO_PKG_VERSION") {
+        info!("Stale JS version requested: {version}");
+        return serve_404(None);
+    }
     let js_path = static_dir.join(stem + ".js");
     serve_js(&js_path).await
+}
+
+/// Serve 404s for unversioned files.
+#[get("/{stem}.{ext:(css|js)}")]
+async fn unversioned(path: web::Path<(String, String)>) -> impl Responder {
+    let (stem, ext) = path.into_inner();
+    info!("Unversioned static asset requested: {stem}.{ext}");
+    serve_404(None)
 }

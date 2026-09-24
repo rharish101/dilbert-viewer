@@ -35,7 +35,9 @@ SPDX-License-Identifier: AGPL-3.0-or-later
   {% if !disable_right_nav %}
     <link rel="prefetch" href="/{{ next_comic }}" />
   {% endif %}
-  <script src="/script.js" async></script>
+  <!-- prettier-ignore-start -->
+  <script src="/script.{{ env!("CARGO_PKG_VERSION") }}.js" async></script>
+  <!-- prettier-ignore-end -->
 {% endblock %}
 
 {% block content %}

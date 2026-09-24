@@ -15,7 +15,10 @@ use jiff::{Span, civil::Date};
 use sea_orm::DatabaseConnection;
 use tracing::{debug, error};
 
-use crate::constants::{CACHE_CONTROL_VALUE, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC, SRC_DATE_FMT};
+use crate::constants::{
+    CACHE_CONTROL_VALUE, CACHE_CONTROL_VALUE_IMMUTABLE, DISP_DATE_FMT, FIRST_COMIC, LAST_COMIC,
+    SRC_DATE_FMT,
+};
 use crate::datetime::str_to_date;
 use crate::db::get_comic;
 use crate::errors::{MinificationError, ViewerError, ViewerResult};
@@ -125,6 +128,9 @@ async fn load_file(path: &Path) -> ViewerResult<String> {
 }
 
 /// Serve the requested CSS file with minification, without handling errors.
+///
+/// NOTE: The response is marked immutable, so it must only be served under a URL containing the
+/// crate version.
 async fn serve_css_raw(path: &Path) -> ViewerResult<HttpResponse> {
     let css = load_file(path).await?;
 
@@ -141,7 +147,7 @@ async fn serve_css_raw(path: &Path) -> ViewerResult<HttpResponse> {
 
     Ok(HttpResponse::Ok()
         .content_type("text/css;charset=utf-8")
-        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE))
+        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE_IMMUTABLE))
         .body(minified))
 }
 
@@ -160,6 +166,9 @@ pub async fn serve_css(path: &Path) -> HttpResponse {
 }
 
 /// Serve the requested JavaScript file with minification, without handling errors.
+///
+/// NOTE: The response is marked immutable, so it must only be served under a URL containing the
+/// crate version.
 async fn serve_js_raw(path: &Path) -> ViewerResult<HttpResponse> {
     let js = load_file(path).await?;
 
@@ -176,7 +185,7 @@ async fn serve_js_raw(path: &Path) -> ViewerResult<HttpResponse> {
 
     Ok(HttpResponse::Ok()
         .content_type("text/javascript;charset=utf-8")
-        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE))
+        .insert_header((CACHE_CONTROL, CACHE_CONTROL_VALUE_IMMUTABLE))
         .body(minified))
 }
 
@@ -434,7 +443,7 @@ mod tests {
         // Check the "Cache-Control" header.
         assert_eq!(
             resp.headers().get(CACHE_CONTROL),
-            Some(&CACHE_CONTROL_VALUE.try_into_value().unwrap()),
+            Some(&CACHE_CONTROL_VALUE_IMMUTABLE.try_into_value().unwrap()),
             "Response has unexpected Cache-Control header"
         );
 

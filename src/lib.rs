@@ -30,7 +30,7 @@ use tracing::{debug, error, info, warn};
 use crate::app::{Viewer, serve_404};
 use crate::constants::{ARC_BASE_URL, CDX_URL, CSP_VALUE, REFERRER_POLICY_VALUE, STATIC_URL};
 use crate::db::{ensure_schema, init_db};
-use crate::handlers::{comic_page, last_comic, minify_css, minify_js, random_comic};
+use crate::handlers::{comic_page, last_comic, minify_css, minify_js, random_comic, unversioned};
 use crate::logging::TracingWrapper;
 use crate::scraper::ComicScraper;
 
@@ -138,6 +138,7 @@ pub async fn serve(
             .service(random_comic)
             .service(minify_css)
             .service(minify_js)
+            .service(unversioned)
             // This should be at the end, otherwise everything after this will be ignored.
             .service(static_service)
     });

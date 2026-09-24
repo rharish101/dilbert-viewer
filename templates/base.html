@@ -15,7 +15,11 @@ SPDX-License-Identifier: AGPL-3.0-or-later
       integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
       crossorigin="anonymous"
     />
-    <link rel="stylesheet" type="text/css" href="/styles.css" />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="/styles.{{ env!("CARGO_PKG_VERSION") }}.css"
+    />
     <link
       rel="icon"
       type="image/png"

@@ -236,8 +236,12 @@ async fn test_random_comic() {
     handle.abort();
 }
 
-#[test_case("styles.css", StatusCode::OK, "text/css"; "css")]
-#[test_case("script.js", StatusCode::OK, "text/javascript"; "js")]
+#[test_case(&format!("styles.{}.css", env!("CARGO_PKG_VERSION")), StatusCode::OK, "text/css"; "versioned css")]
+#[test_case(&format!("script.{}.js", env!("CARGO_PKG_VERSION")), StatusCode::OK, "text/javascript"; "versioned js")]
+#[test_case("styles.0.0.0.css", StatusCode::NOT_FOUND, "text/html"; "stale css version")]
+#[test_case("script.0.0.0.js", StatusCode::NOT_FOUND, "text/html"; "stale js version")]
+#[test_case("styles.css", StatusCode::NOT_FOUND, "text/html"; "unversioned css")]
+#[test_case("script.js", StatusCode::NOT_FOUND, "text/html"; "unversioned js")]
 #[test_case("robots.txt", StatusCode::OK, "text/plain"; "misc")]
 #[test_case("foo", StatusCode::NOT_FOUND, "text/html"; "non-existant")]
 #[test_case("//", StatusCode::NOT_FOUND, "text/html"; "existing directory")]
