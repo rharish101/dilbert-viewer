@@ -14,6 +14,7 @@ use sea_orm::{
 
 #[cfg(test)]
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
+use secrecy::{ExposeSecret, SecretString};
 use tracing::{debug, info};
 
 use crate::constants::{DB_TIMEOUT, ENTITY_PREFIX, MAX_DB_CONN};
@@ -25,8 +26,8 @@ use crate::scraper::ComicData;
 /// # Arguments
 /// * `url` - The URL used to connect to the database, e.g. `postgres://...` or
 ///   `sqlite::memory:` (the latter is used in tests)
-pub(crate) async fn init_db(url: &str) -> Result<DatabaseConnection, DbErr> {
-    let mut options = ConnectOptions::new(url);
+pub(crate) async fn init_db(url: SecretString) -> Result<DatabaseConnection, DbErr> {
+    let mut options = ConnectOptions::new(url.expose_secret());
     options
         .max_connections(MAX_DB_CONN)
         .min_connections(1)

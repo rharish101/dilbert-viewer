@@ -25,6 +25,7 @@ use actix_web::{
     web,
 };
 use jiff::civil::Date;
+use secrecy::SecretString;
 use tracing::{debug, error, info, warn};
 
 use crate::app::{Viewer, serve_404};
@@ -50,7 +51,7 @@ pub mod test {
     /// * `url` - The URL to connect to the database with
     /// * `dates` - The dates for which a placeholder comic is to be inserted
     pub async fn seed_db(url: &str, dates: &[Date]) -> Result<DatabaseConnection, DbErr> {
-        let db = init_db(url).await?;
+        let db = init_db(url.into()).await?;
         ensure_schema(&db).await?;
         for &date in dates {
             let comic_data = ComicData {
@@ -101,12 +102,12 @@ fn get_static_service(static_dir: String) -> Files {
 /// * `workers` - The optional number of workers to use
 pub async fn serve(
     host: String,
-    db_url: String,
+    db_url: SecretString,
     static_dir: String,
     workers: Option<usize>,
 ) -> std::io::Result<()> {
     // Create all worker-shared (i.e. thread-safe) structs here
-    let db = init_db(&db_url)
+    let db = init_db(db_url)
         .await
         .expect("Couldn't connect to the database");
     if let Err(err) = ensure_schema(&db).await {
@@ -161,7 +162,7 @@ pub async fn serve(
 /// * `source_url` - The optional URL to the custom comic source
 /// * `cdx_url` - The optional URL to the custom CDX API
 pub async fn populate(
-    db_url: &str,
+    db_url: SecretString,
     dates: Vec<Date>,
     overwrite: bool,
     source_url: Option<String>,

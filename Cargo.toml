@@ -36,6 +36,7 @@ portpicker = "0.1.1"
 rand = "0.10.1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 sea-orm = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls", "entity-registry", "schema-sync"] }
+secrecy = "0.10.3"
 serde = { version = "1.0.147", features = ["derive"] }
 thiserror = "2.0.9"
 tl = "0.7.7"

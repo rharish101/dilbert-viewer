@@ -8,6 +8,7 @@ use std::io::stdout;
 use clap::{Parser, Subcommand};
 use jiff::civil::Date;
 use portpicker::{is_free, pick_unused_port};
+use secrecy::SecretString;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
 
@@ -24,7 +25,7 @@ fn parse_date(date_str: &str) -> Result<Date, String> {
 struct Cli {
     /// Comics database URL with credentials
     #[arg(short, long, env)]
-    database_url: String,
+    database_url: SecretString,
 
     // Use the `RUST_LOG` env var, like `env_logger`, but with a default.
     /// Log level for all logs
@@ -115,7 +116,7 @@ async fn main() -> std::io::Result<()> {
                 .await
         }
         Command::Populate { date, overwrite } => {
-            dilbert_viewer::populate(&cli.database_url, date, overwrite, None, None).await
+            dilbert_viewer::populate(cli.database_url, date, overwrite, None, None).await
         }
     }
 }
