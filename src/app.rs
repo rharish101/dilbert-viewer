@@ -457,6 +457,66 @@ mod tests {
         minifier::css::minify(body_utf8).expect("Response body not valid CSS");
     }
 
+    #[test_case("static/script.js", true; "app JS")]
+    #[test_case("script.js", false; "missing file")]
+    #[test_case("/", false; "invalid JS path")]
+    #[actix_web::test]
+    /// Test serving of JS files.
+    ///
+    /// # Arguments
+    /// * `path` - The path to the JS file to be used for testing
+    /// * `should_serve` - Whether the expected behaviour is to serve a response or to crash
+    async fn test_js_serving(path: &str, should_serve: bool) {
+        let path = Path::new(path);
+        let resp = match serve_js_raw(path).await {
+            Ok(resp) => resp,
+            Err(ViewerError::NotFound(err)) => {
+                if should_serve {
+                    panic!("Error serving JS that exists: {err}");
+                } else {
+                    return;
+                }
+            }
+            Err(err) => panic!("Error serving JS: {err}"),
+        };
+
+        // Ensure that no JS is served when it shouldn't.
+        if !should_serve {
+            panic!("JS served even when path doesn't exist");
+        }
+
+        // Check the response status.
+        assert_eq!(resp.status(), StatusCode::OK, "Response is not status OK");
+
+        // Check the "Content-Type" header.
+        let content_type = resp
+            .headers()
+            .get(CONTENT_TYPE)
+            .expect("Missing Content-Type header")
+            .to_str()
+            .expect("Content-Type header value not valid UTF-8");
+        assert!(
+            content_type.contains("text/javascript"),
+            "Response content type is not JS"
+        );
+
+        // Check the "Cache-Control" header.
+        assert_eq!(
+            resp.headers().get(CACHE_CONTROL),
+            Some(&CACHE_CONTROL_VALUE_IMMUTABLE.try_into_value().unwrap()),
+            "Response has unexpected Cache-Control header"
+        );
+
+        // Check if response body is valid UTF-8 and the JS is parsable.
+        let body = resp
+            .into_body()
+            .try_into_bytes()
+            .expect("Could not read response body");
+        let body_utf8 = std::str::from_utf8(&body).expect("Response body not UTF-8");
+        // NOTE: This doesn't guarantee that the JS is valid.
+        minifier::js::minify(body_utf8).expect("Response body not valid JS");
+    }
+
     /// Enum for the state of `Viewer::get_comic_info`.
     #[derive(PartialEq, Eq)]
     enum GetComicInfoState {
