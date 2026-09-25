@@ -5,7 +5,7 @@
 //! Route handlers for the server
 //!
 //! This is kept separate from `lib.rs`, since actix-web handlers are pub by default.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use actix_web::{HttpResponse, Responder, get, http::header::LOCATION, web};
 use jiff::{Span, civil::Date};
@@ -76,8 +76,11 @@ async fn minify_css(
         info!("Stale CSS version requested: {version}");
         return serve_404(None);
     }
-    let css_path = static_dir.join(stem + ".css");
-    serve_css(&css_path).await
+
+    match validate_static_path(&static_dir, &(stem + ".css")) {
+        Some(css_path) => serve_css(&css_path).await,
+        None => serve_404(None),
+    }
 }
 
 /// Serve JS after minification, with the crate version in the URL for cache-busting.
@@ -94,8 +97,28 @@ async fn minify_js(
         info!("Stale JS version requested: {version}");
         return serve_404(None);
     }
-    let js_path = static_dir.join(stem + ".js");
-    serve_js(&js_path).await
+
+    match validate_static_path(&static_dir, &(stem + ".js")) {
+        Some(js_path) => serve_js(&js_path).await,
+        None => serve_404(None),
+    }
+}
+
+/// Validate a static file path, ensuring it stays within `static_dir`.
+///
+/// Canonicalizing both paths and checking containment blocks traversal via
+/// percent-decoded `/` (e.g. `..%2F`) and symlinks pointing outside.
+///
+/// # Arguments
+/// * `static_dir` - The directory containing static files
+/// * `filename` - The requested filename
+///
+/// # Returns
+/// * `None` if the file doesn't exist or escapes `static_dir`, otherwise the joined path.
+fn validate_static_path(static_dir: &Path, filename: &str) -> Option<PathBuf> {
+    let root = static_dir.canonicalize().ok()?;
+    let path = static_dir.join(filename).canonicalize().ok()?;
+    path.starts_with(root).then_some(path)
 }
 
 /// Serve 404s for unversioned files.

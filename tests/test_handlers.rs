@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::io;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use actix_web::rt::spawn;
@@ -263,4 +264,44 @@ async fn test_static(path: &str, status_code: StatusCode, content_type: &str) {
     assert_eq!(resp.status(), status_code, "Unexpected response status");
     test_response_header(&resp, &CONTENT_TYPE, content_type);
     test_default_headers(&resp);
+}
+
+#[test_case("css", "body { color: red; }", "red"; "CSS")]
+#[test_case("js", "var x = 1;", "var x"; "JS")]
+#[actix_web::test]
+/// Test that path traversal via percent-encoded slashes in the versioned asset routes is rejected.
+///
+/// `web::Path` percent-decodes path parameters, so `..%2F` in a URL decodes to `../` in the
+/// stem. Without any checks, such a URL could read arbitrary `*.css`/`*.js` files outside the
+/// static directory.
+async fn test_traversal_rejected(file_ext: &str, contents: &str, needle: &str) {
+    let port = pick_unused_port().expect("Couldn't find an available port");
+    let (handle, client, _db) = start_server(port, &[]).await;
+    let version = env!("CARGO_PKG_VERSION");
+
+    // Plant probe files in `target/`, the parent of the static directory, so they're
+    // reachable as `../target/...` from it.
+    let probe_filename = format!("traversal-probe.{file_ext}");
+    let probe = PathBuf::from("target").join(probe_filename);
+    std::fs::write(&probe, contents).expect("Couldn't write probe file: {probe_filename}");
+
+    let url = format!("http://{HOST}:{port}/..%2Ftarget%2Ftraversal-probe.{version}.{file_ext}");
+    let resp = send_get(&client, &url).await;
+    let status = resp.status();
+    let body = resp.text().await.expect("Couldn't read response body");
+
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "Traversal request was not rejected: {url}"
+    );
+    assert!(
+        !body.contains(needle),
+        "Traversal leaked file contents: {url}"
+    );
+
+    // Remove the probe, but ignore errors.
+    let _ = std::fs::remove_file(&probe);
+    // Close the server.
+    handle.abort();
 }
