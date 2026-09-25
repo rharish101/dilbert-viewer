@@ -31,7 +31,10 @@ impl From<MinifyHtmlError> for MinificationError {
 /// All errors raised by the viewer
 pub enum ViewerError {
     /// Errors when executing a DB query
-    #[error("Database error: {0}")]
+    // This enum is rendered publicly by the internal error handler. Therefore, hide the error
+    // string, in the rare case that the DB URL is somehow exposed. The full error chain is still
+    // available via `Debug` for logging.
+    #[error("Database error")]
     Db(#[from] DbErr),
     /// Errors in parsing dates
     #[error("Error parsing date: {0}")]

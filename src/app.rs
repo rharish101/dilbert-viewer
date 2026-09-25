@@ -235,6 +235,8 @@ pub fn serve_404(date: Option<&Date>) -> HttpResponse {
 /// # Arguments
 /// * `err` - The actual internal server error
 pub fn serve_500(err: &ViewerError) -> HttpResponse {
+    // Log the full error chain; only the (sanitized) `Display` text is shown publicly.
+    error!("Serving 500 internal server error: {err:?}");
     let error = &format!("{err}");
     let mut response = HttpResponse::InternalServerError();
 
@@ -603,8 +605,24 @@ mod tests {
             GetComicInfoState::Fail => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
+        let is_fail = state == GetComicInfoState::Fail;
         let (viewer, comic_date, _) = get_mock_viewer(state).await;
         let resp = viewer.serve_comic(&comic_date).await;
         assert_eq!(resp.status(), expected_status);
+
+        // The 500 page must not leak details of the DB error (e.g. pool state) to the client.
+        if is_fail {
+            let body = resp
+                .into_body()
+                .try_into_bytes()
+                .expect("Could not read response body");
+            let body_utf8 = std::str::from_utf8(&body).expect("Response body not UTF-8");
+
+            // The tests shut down the DB connection to simulate errors.
+            assert!(
+                !body_utf8.contains("Connection closed"),
+                "500 page leaked DB error details"
+            );
+        }
     }
 }
