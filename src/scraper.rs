@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tl::{Bytes, Node, ParserOptions, parse as parse_html};
 use tracing::{Level, debug, error, info, instrument, level_enabled, warn};
+use url::Url;
 
 use crate::constants::{
     CDX_TIMESTAMP_FALLBACK, FIRST_COMIC, LAST_COMIC, MAX_CONC_SCRAPES, RESP_TIMEOUT, SCRAPE_DELAY,
@@ -61,6 +62,34 @@ mod inner {
     /// Convert a response body to a string, erroring if it's not UTF-8.
     fn utf8<'a>(bytes: &'a [u8], what: &str) -> ScraperResult<&'a str> {
         std::str::from_utf8(bytes).map_err(|_| ScraperError::Scrape(format!("{what} is not UTF-8")))
+    }
+
+    /// Normalize and validate a scraped URL before it is stored.
+    ///
+    /// Protocol-relative URLs (`//host/...`) are upgraded to `https://`, and the result must then
+    /// be a syntactically valid URL with an `https` scheme. The original (upgraded) string is
+    /// returned unchanged, so valid URLs are not rewritten.
+    ///
+    /// # Arguments
+    /// * `raw` - The raw URL string scraped from the source
+    /// * `desc` - A description of the field, used in the error message
+    pub(super) fn sanitize_url(raw: &str, desc: &str) -> ScraperResult<String> {
+        let url = if let Some(rest) = raw.strip_prefix("//") {
+            format!("https://{rest}")
+        } else {
+            String::from(raw)
+        };
+
+        match Url::parse(&url) {
+            Ok(parsed) if parsed.scheme() == "https" => Ok(url),
+            Ok(parsed) => Err(ScraperError::Scrape(format!(
+                "Rejected non-HTTPS {desc} URL: {raw} (scheme: {})",
+                parsed.scheme()
+            ))),
+            Err(err) => Err(ScraperError::Scrape(format!(
+                "Rejected invalid {desc} URL: {raw} ({err})"
+            ))),
+        }
     }
 
     async fn get_cdx_timestamp(
@@ -158,6 +187,8 @@ mod inner {
             }
 
             // Use the final URL after redirections, in case of CDX API fallbacks.
+            // This is always a well-formed absolute http(s) URL that the client actually
+            // connected to, so it needs no sanitization.
             let permalink = String::from(resp.url().as_str());
 
             let bytes = resp.bytes().await?;
@@ -190,29 +221,29 @@ mod inner {
                         "Error in scraping the image's details".into(),
                     ));
                 };
-            let get_i32_img_attr = |attr| -> Option<i32> {
+            // The image width and height are the "width" and "height" attributes
+            let get_pos_i32_img_attr = |attr| -> ScraperResult<i32> {
                 img_attrs
                     .get(attr)
                     .flatten()
                     .and_then(Bytes::try_as_utf8_str)
                     .and_then(|attr_str| attr_str.parse().ok())
+                    .filter(|&value| value > 0)
+                    .ok_or_else(|| {
+                        ScraperError::Scrape(format!("Invalid image {attr}: not a positive number"))
+                    })
             };
-
-            // The image width and height are the "width" and "height" attributes
-            let img_width = get_i32_img_attr("width").ok_or_else(|| {
-                ScraperError::Scrape("Error in scraping the image's width".into())
-            })?;
-            let img_height = get_i32_img_attr("height").ok_or_else(|| {
-                ScraperError::Scrape("Error in scraping the image's height".into())
-            })?;
+            let img_width = get_pos_i32_img_attr("width")?;
+            let img_height = get_pos_i32_img_attr("height")?;
 
             // The image URL is the "src" attribute of the image element
-            let img_url = img_attrs
+            let img_url_raw = img_attrs
                 .get("src")
                 .flatten()
                 .and_then(Bytes::try_as_utf8_str)
                 .map(String::from)
                 .ok_or_else(|| ScraperError::Scrape("Error in scraping the image's URL".into()))?;
+            let img_url = sanitize_url(&img_url_raw, "image")?;
 
             let comic_data = ComicData {
                 title,
@@ -451,6 +482,31 @@ mod tests {
         }
     }
 
+    #[test_case("https://example.com/img.png", Some("https://example.com/img.png"); "absolute https URL is kept")]
+    #[test_case("//example.com/img.png", Some("https://example.com/img.png"); "protocol-relative URL is upgraded")]
+    #[test_case("HTTPS://EXAMPLE.COM/IMG.PNG", Some("HTTPS://EXAMPLE.COM/IMG.PNG"); "uppercase https URL is kept")]
+    #[test_case("http://example.com/img.png", None; "http URL is rejected")]
+    #[test_case("javascript:'<html><body></body></html>'", None; "javascript URL is rejected")]
+    #[test_case("data:image/png;base64,AAAA", None; "data URL is rejected")]
+    #[test_case("/web/img.png", None; "root-relative URL is rejected")]
+    #[test_case("", None; "empty URL is rejected")]
+    #[test_case("https://", None; "missing host is rejected")]
+    #[test_case("https://exa mple.com/img.png", None; "space in host is rejected")]
+    /// Test that `sanitize_url` keeps only syntactically valid `https` URLs (upgrading
+    /// protocol-relative ones) and rejects every other scheme or invalid URL.
+    ///
+    /// # Arguments
+    /// * `raw` - The raw URL to sanitize
+    /// * `expected` - The expected sanitized URL, when `valid`
+    fn test_sanitize_url(raw: &str, expected: Option<&str>) {
+        let actual = sanitize_url(raw, "image").ok();
+        assert_eq!(
+            actual.as_deref(),
+            expected,
+            "Expected {raw:?} to sanitize to {expected:?}"
+        );
+    }
+
     #[test_case((2000, 1, 1), Some("20200101"); "valid timestamp")]
     #[test_case((2000, 1, 1), None; "API failure")]
     #[actix_web::test]
@@ -508,8 +564,8 @@ mod tests {
     }
 
     #[test_case((2000, 1, 1), StatusCode::OK, None, ("", "https://web.archive.org/web/20150226185430im_/http://assets.amuniversal.com/bdc8a4d06d6401301d80001dd8b71c47", 900, 266); "without title")]
-    #[test_case((2020, 1, 1), StatusCode::OK, None, ("Rfp Process", "//web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
-    #[test_case((2020, 1, 1), StatusCode::OK, Some("20200101"), ("Rfp Process", "//web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "permalink redirection")]
+    #[test_case((2020, 1, 1), StatusCode::OK, None, ("Rfp Process", "https://web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "with title")]
+    #[test_case((2020, 1, 1), StatusCode::OK, Some("20200101"), ("Rfp Process", "https://web.archive.org/web/20200101060221im_/https://assets.amuniversal.com/7c2789d004020138d860005056a9545d", 900, 280); "permalink redirection")]
     #[test_case((2000, 1, 1), StatusCode::NOT_FOUND, None, ("", "", 0, 0); "missing")]
     #[test_case((2000, 1, 1), StatusCode::FORBIDDEN, None, ("", "", 0, 0); "redirected to linktree")]
     #[actix_web::test]
