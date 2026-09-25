@@ -29,44 +29,46 @@ Then, set up a PostgreSQL database. After that, run the scraper against the
 database as follows:
 
 ```sh
-DATABASE_URL=... cargo run populate
+DATABASE_URL=... dilbert-viewer populate
 ```
-
-For more fine-grained control, see the exposed options for the scraper via
-`cargo run populate --help`.
 
 Once the database is fully populated, run the viewer locally as follows:
 
 ```sh
-DATABASE_URL=... cargo run serve
+DATABASE_URL=... dilbert-viewer serve
 ```
 
-### Environment Variables
+## Command-Line Options
 
-For specifying the database details, set the `DATABASE_URL` environment variable
-according to
-[this specification](https://www.sea-ql.org/SeaORM/docs/install-and-config/connection/#postgres).
-For example, to connect to the `dilbert` database in the PostgreSQL server at
-localhost with username `myuser` and password `mypassword`, use:
-`postgres://myuser:mypassword@localhost/dilbert`.
-
-To set the log level for either mode (populate vs serve) of the viewer, set the
-`RUST_LOG` environment variable according to
-[this specification](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives).
-For example, to view all logs at or above the `DEBUG` level, run:
+For more fine-grained control, see the full options list via:
 
 ```sh
-RUST_LOG=debug DATABASE_URL=... cargo run ...
+dilbert-viewer --help
 ```
 
-To set the path to the static files directory (used for CSS, JS & others), set
-the `STATIC_DIR` environment variable to the path (either absolute or relative)
-to the static files directory. For example, to use the static files at
-`/usr/share/dilbert-viewer/static`, run:
+For subcommands (`serve`/`populate`):
 
 ```sh
-STATIC_DIR=/usr/share/dilbert-viewer/static DATABASE_URL=... cargo run ...
+dilbert-viewer <serve|populate> --help
 ```
+
+Several options have environment variable fallbacks, e.g. `DATABASE_URL` for
+`--database-url`, `PORT` for `--port`. `--help` should list the environment
+variable for each such flag. A flag always takes precedence over its environment
+variable.
+
+### Notes
+
+- The database URL format (`--database-url`) follows
+  [this specification](https://www.sea-ql.org/SeaORM/docs/install-and-config/connection/#postgres).
+  For example, `postgres://myuser:mypassword@localhost/dilbert`.
+- `--log-level` uses the standard `RUST_LOG` environment variable with the
+  [`tracing` filter syntax](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives).
+  For example, `debug`, or `dilbert_viewer=trace`.
+- The default port, when one is not provided, is `5000`. If `5000` is already in
+  use, a free port is randomly chosen.
+- The `populate` subcommand's `date` argument is a repeatable positional
+  argument; omit it to scrape every date.
 
 ## Contributing
 
@@ -86,11 +88,17 @@ pre-commit. Just replace all `pre-commit` invocations by `prek`.
 
 One of the hooks runs [Prettier](https://prettier.io/) to format Markdown, JSON
 and Jinja template files. This step requires **npm**, thus, install it along
-with Node.js before running pre-commit.
+with Node.js. Next, install Prettier and its plugins:
 
-pre-commit/prek install Prettier into their own isolated environments, so there
-is no need to run `npm install` yourself, unless you want to run prettier
-manually:
+```sh
+npm install
+```
+
+**NOTE:** pre-commit/prek depend on Prettier installed in 'node_modules'; they
+don't install Prettier into their own isolated environments. Hence the above
+step.
+
+If you want to run Prettier manually:
 
 ```sh
 npm run format
