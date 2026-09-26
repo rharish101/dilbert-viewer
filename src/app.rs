@@ -4,7 +4,9 @@
 
 //! The viewer app struct and its methods
 use std::cmp::{max, min};
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use actix_web::{
     HttpResponse,
@@ -28,22 +30,52 @@ use crate::templates::{ComicTemplate, ErrorTemplate, NotFoundTemplate};
 pub struct Viewer {
     /// The database connection.
     db: DatabaseConnection,
+    /// Cache of already-fetched comic data.
+    comic_cache: Arc<Mutex<HashMap<Date, ComicData>>>,
 }
 
 impl Viewer {
     /// Initialize all necessary stuff for the viewer.
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+    ///
+    /// # Arguments
+    /// * `db` - The database connection
+    /// * `comic_cache` - The comic cache to use.
+    pub fn new(db: DatabaseConnection, comic_cache: Arc<Mutex<HashMap<Date, ComicData>>>) -> Self {
+        Self { db, comic_cache }
     }
 
     /// Get the info about the requested comic.
+    ///
+    /// Results are memoized in the comic cache, so each date is only fetched from the database at
+    /// most once.
     async fn get_comic_info(&self, date: &Date) -> ViewerResult<ComicData> {
-        if let Some(comic_data) = get_comic(&self.db, *date).await? {
-            debug!("Retrieved data from DB: {comic_data:?}");
-            Ok(comic_data)
-        } else {
-            Err(ViewerError::NotFound(format!("No comic found for {date}")))
+        // The guard is dropped before the DB await below.
+        if let Some(comic_data) = self
+            .comic_cache
+            .lock()
+            // Ignore poisoned (a prior holder panicked) locks, as nothing complex happens when the
+            // lock is held, and it's unlikely.
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(date)
+        {
+            debug!("Retrieved data from cache: {comic_data:?}");
+            return Ok(comic_data.clone());
         }
+
+        let comic_data = if let Some(comic_data) = get_comic(&self.db, *date).await? {
+            // NOTE: get_comic logs whether it found the data or not.
+            comic_data
+        } else {
+            return Err(ViewerError::NotFound(format!("No comic found for {date}")));
+        };
+
+        self.comic_cache
+            .lock()
+            // Ignore poisoned (a prior holder panicked) locks, as nothing complex happens when the
+            // lock is held, and it's unlikely.
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(*date, comic_data.clone());
+        Ok(comic_data)
     }
 
     /// Serve the requested comic.
@@ -567,7 +599,7 @@ mod tests {
             GetComicInfoState::MissingComic => {}
         };
 
-        let viewer = Viewer { db };
+        let viewer = Viewer::new(db, Arc::new(Mutex::new(HashMap::new())));
         (viewer, comic_date, comic_data)
     }
 
@@ -588,6 +620,36 @@ mod tests {
             Err(ViewerError::NotFound(..)) if is_missing => {}
             Err(err) => panic!("Viewer failed to get info: {err}"),
         };
+    }
+
+    #[actix_web::test]
+    /// Test that comic info is cached, so it can be retrieved even after the database fails.
+    async fn test_get_comic_info_cached() {
+        let (viewer, comic_date, comic_data) = get_mock_viewer(GetComicInfoState::Found).await;
+
+        // The first retrieval queries the database.
+        let first_data = viewer
+            .get_comic_info(&comic_date)
+            .await
+            .expect("First retrieval of comic info failed");
+        assert_eq!(first_data, comic_data, "Viewer returned wrong comic data");
+
+        // Ensure the DB can't be queried by closing the connection pool.
+        viewer
+            .db
+            .close_by_ref()
+            .await
+            .expect("Failed to close the database connection");
+
+        // The second retrieval must be served from the cache without the database.
+        let second_data = viewer
+            .get_comic_info(&comic_date)
+            .await
+            .expect("Cached retrieval of comic info failed");
+        assert_eq!(
+            second_data, comic_data,
+            "Viewer returned wrong cached comic data"
+        );
     }
 
     #[test_case(GetComicInfoState::Found; "comic exists")]

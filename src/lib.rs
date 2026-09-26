@@ -26,6 +26,8 @@ use actix_web::{
 };
 use jiff::civil::Date;
 use secrecy::SecretString;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info, warn};
 
 use crate::app::{Viewer, serve_404};
@@ -113,10 +115,12 @@ pub async fn serve(
     if let Err(err) = ensure_schema(&db).await {
         warn!("Couldn't sync the database schema: {err}.");
     };
+    // A single comic cache shared by every worker.
+    let comic_cache = Arc::new(Mutex::new(HashMap::new()));
 
     let mut server = HttpServer::new(move || {
         // Create all worker-specific (i.e. thread-unsafe) structs here
-        let viewer = Viewer::new(db.clone());
+        let viewer = Viewer::new(db.clone(), comic_cache.clone());
         let static_service = get_static_service(static_dir.clone());
         let default_headers = DefaultHeaders::new()
             .add(("Content-Security-Policy", CSP_VALUE))
