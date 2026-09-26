@@ -19,7 +19,7 @@
       packages = forAllSystems (pkgs: {
         default = pkgs.rustPlatform.buildRustPackage {
           pname = "dilbert-viewer";
-          version = "0.4.0";
+          version = "0.5.0";
 
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
