@@ -4,7 +4,7 @@
 
 [package]
 name = "dilbert-viewer"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 description = "Simple viewer webpage for Dilbert by Scott Adams"
 readme = "README.md"
