@@ -23,6 +23,7 @@
 
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
+          doCheck = false; # Takes too much time.
 
           # Ship the static assets next to the binary.
           postInstall = ''
